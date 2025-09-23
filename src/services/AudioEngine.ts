@@ -45,7 +45,7 @@ class AudioEngine {
       Tone.getTransport().schedule((time) => {
         const durationInSeconds = (note.duration * 60) / tempo;
         this.sampler?.triggerAttackRelease(note.pitch, durationInSeconds, time);
-      }, `${note.startTime * 4}n`);
+      }, `0:${note.startTime}`);
     });
 
     const maxTime = notes.reduce((max, note) => Math.max(max, note.startTime + note.duration), 0);
@@ -55,7 +55,7 @@ class AudioEngine {
         this.stopPlayback();
         onComplete();
       }, time);
-    }, `${maxTime * 4}n`);
+    }, `0:${maxTime}`);
 
     Tone.getTransport().start();
 
