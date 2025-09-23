@@ -5,6 +5,7 @@ interface AppState {
   song: Song;
   isPlaying: boolean;
   currentBeat: number;
+  cursorPosition: number;
   selectedDuration: NoteDuration;
   isChromatic: boolean;
   selectedNoteId: string | null;
@@ -17,6 +18,7 @@ interface AppState {
   deleteNote: (id: string) => void;
   setIsPlaying: (isPlaying: boolean) => void;
   setCurrentBeat: (beat: number) => void;
+  setCursorPosition: (position: number) => void;
   setSelectedDuration: (duration: NoteDuration) => void;
   setIsChromatic: (isChromatic: boolean) => void;
   setSelectedNoteId: (id: string | null) => void;
@@ -34,6 +36,7 @@ export const useStore = create<AppState>((set) => ({
   },
   isPlaying: false,
   currentBeat: 0,
+  cursorPosition: 0,
   selectedDuration: 1,
   isChromatic: false,
   selectedNoteId: null,
@@ -87,6 +90,7 @@ export const useStore = create<AppState>((set) => ({
 
   setIsPlaying: (isPlaying) => set({ isPlaying }),
   setCurrentBeat: (currentBeat) => set({ currentBeat }),
+  setCursorPosition: (cursorPosition) => set({ cursorPosition }),
   setSelectedDuration: (selectedDuration) => set({ selectedDuration }),
   setIsChromatic: (isChromatic) => set({ isChromatic }),
   setSelectedNoteId: (selectedNoteId) => set({ selectedNoteId }),

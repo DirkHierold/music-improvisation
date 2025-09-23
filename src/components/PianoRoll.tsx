@@ -46,6 +46,21 @@ const Beat = styled.div<{ $isMeasureStart: boolean }>`
   border-left: 1px solid ${props => props.$isMeasureStart ? '#555' : 'transparent'};
   border-right: 1px solid #3a3a3a;
   flex-shrink: 0;
+  position: relative;
+`;
+
+const BeatClickArea = styled.div`
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: pointer;
+  z-index: 5;
+
+  &:hover {
+    background-color: rgba(230, 126, 34, 0.3);
+  }
 `;
 
 const NoteBlock = styled.div<{ $color: string; $selected: boolean; $isPlaying: boolean }>`
@@ -102,7 +117,7 @@ const PlaybackCursor = styled.div.attrs<{ $position: number }>(props => ({
 `;
 
 export function PianoRoll() {
-  const { song, isChromatic, selectedDuration, currentBeat, isPlaying, addNote, updateNote, deleteNote, selectedNoteId, setSelectedNoteId, setSelectedDuration } = useStore();
+  const { song, isChromatic, selectedDuration, currentBeat, cursorPosition, isPlaying, addNote, updateNote, deleteNote, selectedNoteId, setSelectedNoteId, setSelectedDuration, setCursorPosition } = useStore();
   const [draggedNote, setDraggedNote] = useState<string | null>(null);
   const [resizingNote, setResizingNote] = useState<string | null>(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0, startTime: 0, pitch: '' });
@@ -127,6 +142,11 @@ export function PianoRoll() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedNoteId, deleteNote, setSelectedNoteId]);
+
+  const handleBeatLineClick = (e: React.MouseEvent, beat: number) => {
+    e.stopPropagation();
+    setCursorPosition(beat);
+  };
 
   const handleCellClick = async (pitch: string, beat: number) => {
     const existingNote = song.notes.find(
@@ -257,10 +277,12 @@ export function PianoRoll() {
     }
   }, [draggedNote, resizingNote, dragStart, song.notes]);
 
+  const displayPosition = isPlaying ? currentBeat : cursorPosition;
+
   return (
     <Container ref={containerRef}>
       <Grid>
-        {isPlaying && <PlaybackCursor $position={50 + currentBeat * 60} />}
+        <PlaybackCursor $position={50 + displayPosition * 60} />
         {reversedNotes.map((pitch) => (
           <Row key={pitch}>
             <NoteLabel>{pitch}</NoteLabel>
@@ -270,7 +292,9 @@ export function PianoRoll() {
                   key={beatIndex}
                   $isMeasureStart={beatIndex % song.meter.beatsPerMeasure === 0}
                   onClick={() => handleCellClick(pitch, beatIndex)}
-                />
+                >
+                  <BeatClickArea onClick={(e) => handleBeatLineClick(e, beatIndex)} />
+                </Beat>
               ))}
               {song.notes
                 .filter(note => note.pitch === pitch)

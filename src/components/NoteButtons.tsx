@@ -82,7 +82,7 @@ const NoteButton = styled.button<{ $color: string }>`
 `;
 
 export function NoteButtons() {
-  const { song, isChromatic, setIsChromatic, selectedDuration, currentBeat, isPlaying, addNote } = useStore();
+  const { song, isChromatic, setIsChromatic, selectedDuration, cursorPosition, currentBeat, isPlaying, addNote } = useStore();
 
   const notes = isChromatic
     ? CHROMATIC_NOTES
@@ -93,25 +93,27 @@ export function NoteButtons() {
     const pitch = `${noteName}4`;
     audioEngine.playNote(pitch, selectedDuration);
 
-    const insertPosition = isPlaying ? currentBeat : findNextInsertPosition();
+    const insertPosition = isPlaying ? currentBeat : cursorPosition;
+
+    const overlappingNotes = song.notes.filter(
+      n => n.pitch === pitch && n.startTime >= insertPosition && n.startTime < insertPosition + selectedDuration
+    );
+
+    if (overlappingNotes.length > 0) {
+      const pushAmount = (insertPosition + selectedDuration) - overlappingNotes[0].startTime;
+      song.notes
+        .filter(n => n.startTime >= overlappingNotes[0].startTime)
+        .forEach(n => {
+          const { updateNote } = useStore.getState();
+          updateNote(n.id, { startTime: n.startTime + pushAmount });
+        });
+    }
 
     addNote({
       pitch,
       startTime: insertPosition,
       duration: selectedDuration,
     });
-  };
-
-  const findNextInsertPosition = () => {
-    if (song.notes.length === 0) return 0;
-
-    const lastNote = song.notes.reduce((latest, note) => {
-      const noteEnd = note.startTime + note.duration;
-      const latestEnd = latest.startTime + latest.duration;
-      return noteEnd > latestEnd ? note : latest;
-    });
-
-    return lastNote.startTime + lastNote.duration;
   };
 
   return (

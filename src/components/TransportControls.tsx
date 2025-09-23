@@ -34,7 +34,7 @@ const PlayButton = styled(ControlButton)<{ $isPlaying: boolean }>`
 `;
 
 export function TransportControls() {
-  const { isPlaying, setIsPlaying, setCurrentBeat, song } = useStore();
+  const { isPlaying, setIsPlaying, setCurrentBeat, setCursorPosition, cursorPosition, song } = useStore();
 
   const handlePlay = async () => {
     if (!isPlaying) {
@@ -47,12 +47,14 @@ export function TransportControls() {
         () => {
           setIsPlaying(false);
           setCurrentBeat(0);
+          setCursorPosition(0);
         }
       );
     } else {
       audioEngine.stopPlayback();
       setIsPlaying(false);
       setCurrentBeat(0);
+      setCursorPosition(cursorPosition);
     }
   };
 
@@ -61,6 +63,7 @@ export function TransportControls() {
     audioEngine.rewind();
     setIsPlaying(false);
     setCurrentBeat(0);
+    setCursorPosition(0);
   };
 
   return (
