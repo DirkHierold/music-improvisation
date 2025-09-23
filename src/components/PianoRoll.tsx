@@ -144,16 +144,35 @@ export function PianoRoll() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedNoteId) {
+      if (!selectedNoteId) return;
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         deleteNote(selectedNoteId);
         setSelectedNoteId(null);
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        const note = song.notes.find(n => n.id === selectedNoteId);
+        if (!note) return;
+
+        const currentIndex = reversedNotes.indexOf(note.pitch);
+        if (currentIndex === -1) return;
+
+        const newIndex = e.key === 'ArrowUp'
+          ? Math.max(0, currentIndex - 1)
+          : Math.min(reversedNotes.length - 1, currentIndex + 1);
+
+        const newPitch = reversedNotes[newIndex];
+        if (newPitch !== note.pitch) {
+          updateNote(selectedNoteId, { pitch: newPitch });
+          audioEngine.playNote(newPitch, note.duration);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedNoteId, deleteNote, setSelectedNoteId]);
+  }, [selectedNoteId, deleteNote, setSelectedNoteId, song.notes, reversedNotes, updateNote]);
 
   const handleBeatLineClick = (e: React.MouseEvent, beat: number) => {
     e.stopPropagation();
@@ -218,7 +237,7 @@ export function PianoRoll() {
       const rowHeight = 40;
 
       const beatDelta = Math.round(deltaX / beatWidth);
-      const pitchDelta = -Math.round(deltaY / rowHeight);
+      const pitchDelta = Math.round(deltaY / rowHeight);
 
       const note = song.notes.find(n => n.id === draggedNote);
       if (!note) return;
