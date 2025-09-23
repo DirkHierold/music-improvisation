@@ -134,21 +134,42 @@ export function PianoRoll() {
     ? CHROMATIC_NOTES.map(n => `${n}4`)
     : (MAJOR_SCALES[song.key] || MAJOR_SCALES['C Major']).map(n => `${n}4`);
 
-  const usedPitches = new Set(song.notes.map(n => n.pitch));
-  const allNotes = new Set([...baseNotes, ...usedPitches]);
+  const pitchOrder = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const getOrder = (pitch: string) => {
+    const noteName = pitch.replace(/\d+/, '');
+    const octave = parseInt(pitch.match(/\d+/)?.[0] || '4');
+    const noteIndex = pitchOrder.indexOf(noteName);
+    return octave * 12 + noteIndex;
+  };
 
-  const sortedNotes = Array.from(allNotes).sort((a, b) => {
-    const pitchOrder = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    const getOrder = (pitch: string) => {
-      const noteName = pitch.replace(/\d+/, '');
-      const octave = parseInt(pitch.match(/\d+/)?.[0] || '4');
-      const noteIndex = pitchOrder.indexOf(noteName);
-      return octave * 12 + noteIndex;
-    };
-    return getOrder(a) - getOrder(b);
-  });
+  const usedPitches = song.notes.map(n => n.pitch);
+  const baseOrder = baseNotes.map(getOrder);
+  const minBaseOrder = Math.min(...baseOrder);
+  const maxBaseOrder = Math.max(...baseOrder);
 
-  const reversedNotes = sortedNotes.reverse();
+  let minOrder = minBaseOrder;
+  let maxOrder = maxBaseOrder;
+
+  if (usedPitches.length > 0) {
+    const usedOrders = usedPitches.map(getOrder);
+    minOrder = Math.min(minBaseOrder, ...usedOrders);
+    maxOrder = Math.max(maxBaseOrder, ...usedOrders);
+  }
+
+  const allPitches: string[] = [];
+  for (let order = minOrder; order <= maxOrder; order++) {
+    const octave = Math.floor(order / 12);
+    const noteIndex = order % 12;
+    const pitch = pitchOrder[noteIndex] + octave;
+
+    if (isChromatic || baseNotes.some(bn => getOrder(bn) === order)) {
+      allPitches.push(pitch);
+    } else if (usedPitches.includes(pitch)) {
+      allPitches.push(pitch);
+    }
+  }
+
+  const reversedNotes = allPitches.reverse();
   const beatsPerRow = 20;
 
   const maxNoteEnd = song.notes.reduce((max, note) =>
