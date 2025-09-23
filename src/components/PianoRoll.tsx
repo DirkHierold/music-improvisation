@@ -369,8 +369,8 @@ export function PianoRoll() {
                   {song.notes
                     .filter(note =>
                       note.pitch === pitch &&
-                      note.startTime >= rowStartBeat &&
-                      note.startTime < rowEndBeat
+                      ((note.startTime >= rowStartBeat && note.startTime < rowEndBeat) ||
+                       (note.startTime < rowStartBeat && note.startTime + note.duration > rowStartBeat))
                     )
                     .map(note => {
                       const noteName = note.pitch.replace(/\d+/, '');
@@ -378,21 +378,32 @@ export function PianoRoll() {
                       const isNoteCurrentlyPlaying = isPlaying &&
                         currentBeat >= note.startTime &&
                         currentBeat < note.startTime + note.duration;
-                      const relativeStart = note.startTime - rowStartBeat;
+
+                      const noteStart = note.startTime;
+                      const noteEnd = note.startTime + note.duration;
+
+                      const visibleStart = Math.max(noteStart, rowStartBeat);
+                      const visibleEnd = Math.min(noteEnd, rowEndBeat);
+
+                      const relativeStart = visibleStart - rowStartBeat;
+                      const visibleDuration = visibleEnd - visibleStart;
+
+                      const isContinuation = noteStart < rowStartBeat;
+
                       return (
                         <NoteBlock
-                          key={note.id}
+                          key={`${note.id}-${rowIndex}`}
                           $color={color}
                           $selected={selectedNoteId === note.id}
                           $isPlaying={isNoteCurrentlyPlaying}
                           style={{
                             left: `${relativeStart * 60 + 1}px`,
-                            width: `${note.duration * 60 - 2}px`,
+                            width: `${visibleDuration * 60 - 2}px`,
                           }}
                           onMouseDown={(e) => handleNoteMouseDown(e, note.id)}
                         >
-                          {noteName}
-                          <ResizeHandle onMouseDown={(e) => handleResizeMouseDown(e, note.id)} />
+                          {!isContinuation && noteName}
+                          {!isContinuation && <ResizeHandle onMouseDown={(e) => handleResizeMouseDown(e, note.id)} />}
                         </NoteBlock>
                       );
                     })}
