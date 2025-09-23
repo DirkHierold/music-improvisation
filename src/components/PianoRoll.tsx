@@ -167,6 +167,23 @@ export function PianoRoll() {
           updateNote(selectedNoteId, { pitch: newPitch });
           audioEngine.playNote(newPitch, note.duration);
         }
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        const note = song.notes.find(n => n.id === selectedNoteId);
+        if (!note) return;
+
+        const timeDelta = e.key === 'ArrowLeft' ? -0.25 : 0.25;
+        const newStartTime = Math.max(0, note.startTime + timeDelta);
+
+        if (newStartTime !== note.startTime) {
+          const notesToUpdate = song.notes.filter(n => n.startTime > note.startTime);
+          notesToUpdate.forEach(n => {
+            updateNote(n.id, { startTime: n.startTime + timeDelta });
+          });
+
+          updateNote(selectedNoteId, { startTime: newStartTime });
+          setCursorPosition(newStartTime + note.duration);
+        }
       }
     };
 
