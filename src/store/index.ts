@@ -87,6 +87,7 @@ export const useStore = create<AppState>((set) => ({
     const remainingNotes = state.song.notes.filter((note) => note.id !== id);
 
     let newCursorPosition = 0;
+    let newSelectedNoteId = null;
 
     if (noteToDelete && remainingNotes.length > 0) {
       const notesBefore = remainingNotes
@@ -96,6 +97,7 @@ export const useStore = create<AppState>((set) => ({
       if (notesBefore.length > 0) {
         const previousNote = notesBefore[0];
         newCursorPosition = previousNote.startTime + previousNote.duration;
+        newSelectedNoteId = previousNote.id;
       }
     }
 
@@ -105,7 +107,10 @@ export const useStore = create<AppState>((set) => ({
         notes: remainingNotes
       },
       cursorPosition: newCursorPosition,
-      selectedNoteId: null
+      selectedNoteId: newSelectedNoteId,
+      selectedDuration: newSelectedNoteId
+        ? (remainingNotes.find(n => n.id === newSelectedNoteId)?.duration as NoteDuration || state.selectedDuration)
+        : state.selectedDuration
     };
   }),
 
