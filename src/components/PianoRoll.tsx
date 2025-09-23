@@ -87,9 +87,12 @@ const ResizeHandle = styled.div`
   }
 `;
 
-const PlaybackCursor = styled.div<{ $position: number }>`
+const PlaybackCursor = styled.div.attrs<{ $position: number }>(props => ({
+  style: {
+    left: `${props.$position}px`
+  }
+}))<{ $position: number }>`
   position: absolute;
-  left: ${props => props.$position}px;
   top: 0;
   bottom: 0;
   width: 2px;
