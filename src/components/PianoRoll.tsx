@@ -168,20 +168,24 @@ export function PianoRoll() {
         const note = song.notes.find(n => n.id === selectedNoteId);
         if (!note) return;
 
-        const pitchOrder = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-        const noteName = note.pitch.replace(/\d+/, '');
+        const allPitchOrder = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const scalePitchOrder = (MAJOR_SCALES[song.key] || MAJOR_SCALES['C Major']).map(n => n.replace(/b/g, '#'));
+
+        const pitchOrder = isChromatic ? allPitchOrder : scalePitchOrder;
+
+        const noteName = note.pitch.replace(/\d+/, '').replace(/b/g, '#');
         const octave = parseInt(note.pitch.match(/\d+/)?.[0] || '4');
         const noteIndex = pitchOrder.indexOf(noteName);
 
         let newPitch: string;
         if (e.key === 'ArrowUp') {
           if (noteIndex === 0) {
-            newPitch = pitchOrder[11] + (octave + 1);
+            newPitch = pitchOrder[pitchOrder.length - 1] + (octave + 1);
           } else {
             newPitch = pitchOrder[noteIndex - 1] + octave;
           }
         } else {
-          if (noteIndex === 11) {
+          if (noteIndex === pitchOrder.length - 1) {
             newPitch = pitchOrder[0] + (octave - 1);
           } else {
             newPitch = pitchOrder[noteIndex + 1] + octave;
