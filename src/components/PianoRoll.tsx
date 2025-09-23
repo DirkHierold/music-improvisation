@@ -262,6 +262,17 @@ export function PianoRoll() {
   };
 
   const handleMouseUp = () => {
+    if (draggedNote) {
+      const note = song.notes.find(n => n.id === draggedNote);
+      if (note) {
+        setCursorPosition(note.startTime + note.duration);
+      }
+    } else if (resizingNote) {
+      const note = song.notes.find(n => n.id === resizingNote);
+      if (note) {
+        setCursorPosition(note.startTime + note.duration);
+      }
+    }
     setDraggedNote(null);
     setResizingNote(null);
   };

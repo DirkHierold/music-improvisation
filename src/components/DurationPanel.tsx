@@ -41,7 +41,7 @@ const durations: { value: NoteDuration; label: string }[] = [
 ];
 
 export function DurationPanel() {
-  const { selectedDuration, setSelectedDuration, selectedNoteId, updateNote, song } = useStore();
+  const { selectedDuration, setSelectedDuration, selectedNoteId, updateNote, song, setCursorPosition } = useStore();
 
   const handleDurationClick = (duration: NoteDuration) => {
     setSelectedDuration(duration);
@@ -69,6 +69,7 @@ export function DurationPanel() {
       }
 
       updateNote(selectedNoteId, { duration });
+      setCursorPosition(note.startTime + duration);
     }
   };
 

@@ -68,7 +68,8 @@ export const useStore = create<AppState>((set) => ({
         notes: [...state.song.notes, { ...noteData, id: newId }]
       },
       selectedNoteId: newId,
-      selectedDuration: noteData.duration as NoteDuration
+      selectedDuration: noteData.duration as NoteDuration,
+      cursorPosition: noteData.startTime + noteData.duration
     };
   }),
 
