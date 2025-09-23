@@ -21,7 +21,6 @@ const Grid = styled.div`
 const Row = styled.div`
   display: flex;
   height: 40px;
-  border-bottom: 1px solid #3c3c3c;
   position: relative;
 `;
 
@@ -32,6 +31,7 @@ const NoteLabel = styled.div`
   justify-content: center;
   background-color: #333;
   border-right: 1px solid #3c3c3c;
+  border-bottom: 1px solid #3c3c3c;
   font-size: 12px;
   color: #888;
 `;
@@ -39,6 +39,7 @@ const NoteLabel = styled.div`
 const Timeline = styled.div`
   position: relative;
   display: flex;
+  border-bottom: 1px solid #3c3c3c;
 `;
 
 const Beat = styled.div<{ $isMeasureStart: boolean }>`
