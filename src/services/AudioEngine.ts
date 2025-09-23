@@ -42,21 +42,20 @@ class AudioEngine {
     Tone.getTransport().bpm.value = tempo;
 
     notes.forEach((note) => {
-      const startTimeInSeconds = (note.startTime * 60) / tempo;
-      const durationInSeconds = (note.duration * 60) / tempo;
-
       Tone.getTransport().schedule((time) => {
+        const durationInSeconds = (note.duration * 60) / tempo;
         this.sampler?.triggerAttackRelease(note.pitch, durationInSeconds, time);
-      }, startTimeInSeconds);
+      }, `${note.startTime * 4}n`);
     });
 
     const maxTime = notes.reduce((max, note) => Math.max(max, note.startTime + note.duration), 0);
-    const maxTimeInSeconds = (maxTime * 60) / tempo;
 
-    Tone.getTransport().schedule(() => {
-      this.stopPlayback();
-      onComplete();
-    }, maxTimeInSeconds);
+    Tone.getTransport().schedule((time) => {
+      Tone.getDraw().schedule(() => {
+        this.stopPlayback();
+        onComplete();
+      }, time);
+    }, `${maxTime * 4}n`);
 
     Tone.getTransport().start();
 
