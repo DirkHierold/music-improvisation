@@ -179,16 +179,16 @@ export function PianoRoll() {
 
         let newPitch: string;
         if (e.key === 'ArrowUp') {
-          if (noteIndex === 0) {
-            newPitch = pitchOrder[pitchOrder.length - 1] + (octave + 1);
-          } else {
-            newPitch = pitchOrder[noteIndex - 1] + octave;
-          }
-        } else {
           if (noteIndex === pitchOrder.length - 1) {
-            newPitch = pitchOrder[0] + (octave - 1);
+            newPitch = pitchOrder[0] + (octave + 1);
           } else {
             newPitch = pitchOrder[noteIndex + 1] + octave;
+          }
+        } else {
+          if (noteIndex === 0) {
+            newPitch = pitchOrder[pitchOrder.length - 1] + (octave - 1);
+          } else {
+            newPitch = pitchOrder[noteIndex - 1] + octave;
           }
         }
 
