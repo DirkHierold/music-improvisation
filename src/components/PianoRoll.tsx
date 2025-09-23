@@ -168,18 +168,28 @@ export function PianoRoll() {
         const note = song.notes.find(n => n.id === selectedNoteId);
         if (!note) return;
 
-        const currentIndex = reversedNotes.indexOf(note.pitch);
-        if (currentIndex === -1) return;
+        const pitchOrder = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const noteName = note.pitch.replace(/\d+/, '');
+        const octave = parseInt(note.pitch.match(/\d+/)?.[0] || '4');
+        const noteIndex = pitchOrder.indexOf(noteName);
 
-        const newIndex = e.key === 'ArrowUp'
-          ? Math.max(0, currentIndex - 1)
-          : Math.min(reversedNotes.length - 1, currentIndex + 1);
-
-        const newPitch = reversedNotes[newIndex];
-        if (newPitch !== note.pitch) {
-          updateNote(selectedNoteId, { pitch: newPitch });
-          audioEngine.playNote(newPitch, note.duration);
+        let newPitch: string;
+        if (e.key === 'ArrowUp') {
+          if (noteIndex === 0) {
+            newPitch = pitchOrder[11] + (octave + 1);
+          } else {
+            newPitch = pitchOrder[noteIndex - 1] + octave;
+          }
+        } else {
+          if (noteIndex === 11) {
+            newPitch = pitchOrder[0] + (octave - 1);
+          } else {
+            newPitch = pitchOrder[noteIndex + 1] + octave;
+          }
         }
+
+        updateNote(selectedNoteId, { pitch: newPitch });
+        audioEngine.playNote(newPitch, note.duration);
       } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         e.preventDefault();
         const note = song.notes.find(n => n.id === selectedNoteId);
