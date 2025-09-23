@@ -15,6 +15,7 @@ const Container = styled.div`
 const Grid = styled.div`
   position: relative;
   min-height: 400px;
+  margin-bottom: 20px;
 `;
 
 const Row = styled.div`
@@ -128,7 +129,12 @@ export function PianoRoll() {
     : (MAJOR_SCALES[song.key] || MAJOR_SCALES['C Major']).map(n => `${n}4`);
 
   const reversedNotes = [...notes].reverse();
-  const beatCount = 16;
+  const beatsPerRow = 16;
+
+  const maxNoteEnd = song.notes.reduce((max, note) =>
+    Math.max(max, note.startTime + note.duration), beatsPerRow
+  );
+  const totalRows = Math.ceil(maxNoteEnd / beatsPerRow);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -292,50 +298,67 @@ export function PianoRoll() {
 
   return (
     <Container ref={containerRef}>
-      <Grid>
-        <PlaybackCursor $position={50 + displayPosition * 60} />
-        {reversedNotes.map((pitch) => (
-          <Row key={pitch}>
-            <NoteLabel>{pitch}</NoteLabel>
-            <Timeline>
-              {Array.from({ length: beatCount }).map((_, beatIndex) => (
-                <Beat
-                  key={beatIndex}
-                  $isMeasureStart={beatIndex % song.meter.beatsPerMeasure === 0}
-                  onClick={() => handleCellClick(pitch, beatIndex)}
-                >
-                  <BeatClickArea onClick={(e) => handleBeatLineClick(e, beatIndex)} />
-                </Beat>
-              ))}
-              {song.notes
-                .filter(note => note.pitch === pitch)
-                .map(note => {
-                  const noteName = note.pitch.replace(/\d+/, '');
-                  const color = NOTE_COLORS[noteName.replace('#', '').replace('b', '')] || '#888';
-                  const isNoteCurrentlyPlaying = isPlaying &&
-                    currentBeat >= note.startTime &&
-                    currentBeat < note.startTime + note.duration;
-                  return (
-                    <NoteBlock
-                      key={note.id}
-                      $color={color}
-                      $selected={selectedNoteId === note.id}
-                      $isPlaying={isNoteCurrentlyPlaying}
-                      style={{
-                        left: `${note.startTime * 60 + 1}px`,
-                        width: `${note.duration * 60 - 2}px`,
-                      }}
-                      onMouseDown={(e) => handleNoteMouseDown(e, note.id)}
-                    >
-                      {noteName}
-                      <ResizeHandle onMouseDown={(e) => handleResizeMouseDown(e, note.id)} />
-                    </NoteBlock>
-                  );
-                })}
-            </Timeline>
-          </Row>
-        ))}
-      </Grid>
+      {Array.from({ length: totalRows }).map((_, rowIndex) => {
+        const rowStartBeat = rowIndex * beatsPerRow;
+        const rowEndBeat = (rowIndex + 1) * beatsPerRow;
+
+        return (
+          <Grid key={rowIndex}>
+            {displayPosition >= rowStartBeat && displayPosition < rowEndBeat && (
+              <PlaybackCursor $position={50 + (displayPosition - rowStartBeat) * 60} />
+            )}
+            {reversedNotes.map((pitch) => (
+              <Row key={pitch}>
+                <NoteLabel>{pitch}</NoteLabel>
+                <Timeline>
+                  {Array.from({ length: beatsPerRow }).map((_, beatIndex) => {
+                    const absoluteBeat = rowStartBeat + beatIndex;
+                    return (
+                      <Beat
+                        key={beatIndex}
+                        $isMeasureStart={absoluteBeat % song.meter.beatsPerMeasure === 0}
+                        onClick={() => handleCellClick(pitch, absoluteBeat)}
+                      >
+                        <BeatClickArea onClick={(e) => handleBeatLineClick(e, absoluteBeat)} />
+                      </Beat>
+                    );
+                  })}
+                  {song.notes
+                    .filter(note =>
+                      note.pitch === pitch &&
+                      note.startTime >= rowStartBeat &&
+                      note.startTime < rowEndBeat
+                    )
+                    .map(note => {
+                      const noteName = note.pitch.replace(/\d+/, '');
+                      const color = NOTE_COLORS[noteName.replace('#', '').replace('b', '')] || '#888';
+                      const isNoteCurrentlyPlaying = isPlaying &&
+                        currentBeat >= note.startTime &&
+                        currentBeat < note.startTime + note.duration;
+                      const relativeStart = note.startTime - rowStartBeat;
+                      return (
+                        <NoteBlock
+                          key={note.id}
+                          $color={color}
+                          $selected={selectedNoteId === note.id}
+                          $isPlaying={isNoteCurrentlyPlaying}
+                          style={{
+                            left: `${relativeStart * 60 + 1}px`,
+                            width: `${note.duration * 60 - 2}px`,
+                          }}
+                          onMouseDown={(e) => handleNoteMouseDown(e, note.id)}
+                        >
+                          {noteName}
+                          <ResizeHandle onMouseDown={(e) => handleResizeMouseDown(e, note.id)} />
+                        </NoteBlock>
+                      );
+                    })}
+                </Timeline>
+              </Row>
+            ))}
+          </Grid>
+        );
+      })}
     </Container>
   );
 }
