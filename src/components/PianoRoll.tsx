@@ -149,7 +149,6 @@ export function PianoRoll() {
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         deleteNote(selectedNoteId);
-        setSelectedNoteId(null);
       } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         e.preventDefault();
         const note = song.notes.find(n => n.id === selectedNoteId);
