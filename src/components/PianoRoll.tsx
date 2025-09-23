@@ -162,10 +162,14 @@ export function PianoRoll() {
     const noteIndex = order % 12;
     const pitch = pitchOrder[noteIndex] + octave;
 
-    if (isChromatic || baseNotes.some(bn => getOrder(bn) === order)) {
+    if (isChromatic) {
       allPitches.push(pitch);
-    } else if (usedPitches.includes(pitch)) {
-      allPitches.push(pitch);
+    } else {
+      const basePitchNames = baseNotes.map(bn => bn.replace(/\d+/, ''));
+      const pitchName = pitch.replace(/\d+/, '');
+      if (basePitchNames.includes(pitchName) || usedPitches.includes(pitch)) {
+        allPitches.push(pitch);
+      }
     }
   }
 
