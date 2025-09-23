@@ -40,6 +40,7 @@ const Timeline = styled.div`
   flex: 1;
   position: relative;
   display: flex;
+  border-right: 1px solid #555;
 `;
 
 const Beat = styled.div<{ $isMeasureStart: boolean }>`
@@ -129,7 +130,7 @@ export function PianoRoll() {
     : (MAJOR_SCALES[song.key] || MAJOR_SCALES['C Major']).map(n => `${n}4`);
 
   const reversedNotes = [...notes].reverse();
-  const beatsPerRow = 16;
+  const beatsPerRow = 20;
 
   const maxNoteEnd = song.notes.reduce((max, note) =>
     Math.max(max, note.startTime + note.duration), beatsPerRow
