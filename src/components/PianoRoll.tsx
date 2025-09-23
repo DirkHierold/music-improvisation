@@ -37,10 +37,8 @@ const NoteLabel = styled.div`
 `;
 
 const Timeline = styled.div`
-  flex: 1;
   position: relative;
   display: flex;
-  border-right: 1px solid #555;
 `;
 
 const Beat = styled.div<{ $isMeasureStart: boolean }>`
@@ -63,6 +61,12 @@ const BeatClickArea = styled.div`
   &:hover {
     background-color: rgba(230, 126, 34, 0.3);
   }
+`;
+
+const EndBar = styled.div`
+  width: 1px;
+  border-left: 1px solid #555;
+  flex-shrink: 0;
 `;
 
 const NoteBlock = styled.div<{ $color: string; $selected: boolean; $isPlaying: boolean }>`
@@ -324,6 +328,7 @@ export function PianoRoll() {
                       </Beat>
                     );
                   })}
+                  <EndBar />
                   {song.notes
                     .filter(note =>
                       note.pitch === pitch &&
