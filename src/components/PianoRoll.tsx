@@ -130,11 +130,25 @@ export function PianoRoll() {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0, startTime: 0, pitch: '' });
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const notes = isChromatic
+  const baseNotes = isChromatic
     ? CHROMATIC_NOTES.map(n => `${n}4`)
     : (MAJOR_SCALES[song.key] || MAJOR_SCALES['C Major']).map(n => `${n}4`);
 
-  const reversedNotes = [...notes].reverse();
+  const usedPitches = new Set(song.notes.map(n => n.pitch));
+  const allNotes = new Set([...baseNotes, ...usedPitches]);
+
+  const sortedNotes = Array.from(allNotes).sort((a, b) => {
+    const pitchOrder = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    const getOrder = (pitch: string) => {
+      const noteName = pitch.replace(/\d+/, '');
+      const octave = parseInt(pitch.match(/\d+/)?.[0] || '4');
+      const noteIndex = pitchOrder.indexOf(noteName);
+      return octave * 12 + noteIndex;
+    };
+    return getOrder(a) - getOrder(b);
+  });
+
+  const reversedNotes = sortedNotes.reverse();
   const beatsPerRow = 20;
 
   const maxNoteEnd = song.notes.reduce((max, note) =>
