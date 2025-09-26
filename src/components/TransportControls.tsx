@@ -33,23 +33,51 @@ const PlayButton = styled(ControlButton)<{ $isPlaying: boolean }>`
   }
 `;
 
+const ToggleButton = styled(ControlButton)<{ $isActive: boolean }>`
+  background-color: ${props => props.$isActive ? '#27ae60' : '#3c3c3c'};
+
+  &:hover {
+    background-color: ${props => props.$isActive ? '#2ecc71' : '#4a4a4a'};
+  }
+`;
+
 export function TransportControls() {
-  const { isPlaying, setIsPlaying, setCurrentBeat, setCursorPosition, cursorPosition, song } = useStore();
+  const { isPlaying, setIsPlaying, setCurrentBeat, setCursorPosition, cursorPosition, song, isPracticeMode, setIsPracticeMode } = useStore();
 
   const handlePlay = async () => {
     if (!isPlaying) {
       await audioEngine.initialize();
       setIsPlaying(true);
-      audioEngine.startPlayback(
-        song.notes,
-        song.tempo,
-        (beat) => setCurrentBeat(beat),
-        () => {
-          setIsPlaying(false);
-          setCurrentBeat(0);
-          setCursorPosition(0);
-        }
-      );
+
+      if (isPracticeMode) {
+        // In practice mode, only start the beat counter without audio
+        console.log('🎯 Starting practice mode playback');
+        audioEngine.startPlaybackWithoutAudio(
+          song.tempo,
+          (beat) => {
+            console.log(`📡 Callback received beat: ${beat.toFixed(2)}`);
+            setCurrentBeat(beat);
+          },
+          () => {
+            console.log('🏁 Practice complete callback');
+            setIsPlaying(false);
+            setCurrentBeat(0);
+            setCursorPosition(0);
+          }
+        );
+      } else {
+        // Normal editor mode with audio
+        audioEngine.startPlayback(
+          song.notes,
+          song.tempo,
+          (beat) => setCurrentBeat(beat),
+          () => {
+            setIsPlaying(false);
+            setCurrentBeat(0);
+            setCursorPosition(0);
+          }
+        );
+      }
     } else {
       audioEngine.stopPlayback();
       setIsPlaying(false);
@@ -66,12 +94,24 @@ export function TransportControls() {
     setCursorPosition(0);
   };
 
+  const handleTogglePracticeMode = () => {
+    if (isPlaying) {
+      audioEngine.stopPlayback();
+      setIsPlaying(false);
+      setCurrentBeat(0);
+    }
+    setIsPracticeMode(!isPracticeMode);
+  };
+
   return (
     <Container>
       <PlayButton onClick={handlePlay} $isPlaying={isPlaying}>
         {isPlaying ? '■' : '▶'}
       </PlayButton>
       <ControlButton onClick={handleRewind}>⏮</ControlButton>
+      <ToggleButton onClick={handleTogglePracticeMode} $isActive={isPracticeMode}>
+        {isPracticeMode ? 'Editor' : 'Practice'}
+      </ToggleButton>
     </Container>
   );
 }

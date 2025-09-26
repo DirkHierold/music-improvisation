@@ -5,6 +5,9 @@ import { MusicalParameters } from './components/MusicalParameters';
 import { DurationPanel } from './components/DurationPanel';
 import { NoteButtons } from './components/NoteButtons';
 import { PianoRoll } from './components/PianoRoll';
+import { SaveLoadButtons } from './components/SaveLoadButtons';
+import { UkuleleRoll } from './components/UkuleleRoll';
+import { useStore } from './store';
 
 const AppContainer = styled.div`
   height: 100vh;
@@ -21,6 +24,8 @@ const TopBar = styled.div`
   padding: 15px;
   background-color: #333;
   border-radius: 5px;
+  flex-wrap: wrap;
+  gap: 15px;
 `;
 
 const MiddleSection = styled.div`
@@ -39,6 +44,8 @@ const MainContent = styled.div`
 `;
 
 function App() {
+  const { isPracticeMode } = useStore();
+
   return (
     <>
       <GlobalStyles />
@@ -46,14 +53,23 @@ function App() {
         <TopBar>
           <TransportControls />
           <MusicalParameters />
+          <SaveLoadButtons />
         </TopBar>
-        <MiddleSection>
-          <NoteButtons />
-        </MiddleSection>
-        <MainContent>
-          <DurationPanel />
-          <PianoRoll />
-        </MainContent>
+        {isPracticeMode ? (
+          <MainContent>
+            <UkuleleRoll />
+          </MainContent>
+        ) : (
+          <>
+            <MiddleSection>
+              <NoteButtons />
+            </MiddleSection>
+            <MainContent>
+              <DurationPanel />
+              <PianoRoll />
+            </MainContent>
+          </>
+        )}
       </AppContainer>
     </>
   );

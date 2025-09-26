@@ -9,6 +9,7 @@ interface AppState {
   selectedDuration: NoteDuration;
   isChromatic: boolean;
   selectedNoteId: string | null;
+  isPracticeMode: boolean;
 
   setTempo: (tempo: number) => void;
   setMeter: (beatsPerMeasure: number) => void;
@@ -22,6 +23,10 @@ interface AppState {
   setSelectedDuration: (duration: NoteDuration) => void;
   setIsChromatic: (isChromatic: boolean) => void;
   setSelectedNoteId: (id: string | null) => void;
+  setIsPracticeMode: (isPracticeMode: boolean) => void;
+  saveSong: (name: string) => void;
+  loadSong: (name: string) => boolean;
+  getSavedSongs: () => string[];
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -40,6 +45,7 @@ export const useStore = create<AppState>((set) => ({
   selectedDuration: 1,
   isChromatic: false,
   selectedNoteId: null,
+  isPracticeMode: false,
 
   setTempo: (tempo) => set((state) => ({
     song: { ...state.song, tempo }
@@ -115,11 +121,44 @@ export const useStore = create<AppState>((set) => ({
   }),
 
   setIsPlaying: (isPlaying) => set({ isPlaying }),
-  setCurrentBeat: (currentBeat) => set({ currentBeat }),
+  setCurrentBeat: (currentBeat) => {
+    console.log(`🏪 STORE: Setting currentBeat to ${currentBeat.toFixed(2)}`);
+    set({ currentBeat });
+    console.log(`🏪 STORE: currentBeat set successfully`);
+  },
   setCursorPosition: (cursorPosition) => set({ cursorPosition }),
   setSelectedDuration: (selectedDuration) => set({ selectedDuration }),
   setIsChromatic: (isChromatic) => set({ isChromatic }),
   setSelectedNoteId: (selectedNoteId) => set({ selectedNoteId }),
+  setIsPracticeMode: (isPracticeMode) => set({ isPracticeMode }),
+
+  saveSong: (name) => set((state) => {
+    const savedSongs = JSON.parse(localStorage.getItem('savedSongs') || '{}');
+    savedSongs[name] = state.song;
+    localStorage.setItem('savedSongs', JSON.stringify(savedSongs));
+    return state;
+  }),
+
+  loadSong: (name) => {
+    const savedSongs = JSON.parse(localStorage.getItem('savedSongs') || '{}');
+    const song = savedSongs[name];
+    if (song) {
+      set({
+        song,
+        cursorPosition: 0,
+        selectedNoteId: null,
+        isPlaying: false,
+        currentBeat: 0
+      });
+      return true;
+    }
+    return false;
+  },
+
+  getSavedSongs: () => {
+    const savedSongs = JSON.parse(localStorage.getItem('savedSongs') || '{}');
+    return Object.keys(savedSongs);
+  },
 }));
 
 function transposeNotes(notes: Note[], oldKey: string, newKey: string): Note[] {
