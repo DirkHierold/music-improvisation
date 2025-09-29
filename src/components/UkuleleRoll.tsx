@@ -167,9 +167,8 @@ export function UkuleleRoll() {
   // Keep ref in sync with store value
   currentBeatRef.current = currentBeat;
 
-  // Track beat changes for debugging (reduced logging)
+  // Track beat changes
   if (currentBeat !== lastBeat.current && Math.abs(currentBeat - lastBeat.current) > 0.1) {
-    console.log(`🎭 Beat: ${currentBeat.toFixed(2)}`);
     lastBeat.current = currentBeat;
   }
 
@@ -205,9 +204,9 @@ export function UkuleleRoll() {
     const latestBeat = currentBeatRef.current; // Use ref for latest value!
     const containerWidth = containerRef.current.clientWidth || 800;
 
-    // Check for audio engine issues (reduced logging)
+    // Check for audio engine issues
     if (latestBeat === 0 && performance.now() - startTimeRef.current > 2000) {
-      console.error('❌ Beat counter not working! AudioEngine problem.');
+      return; // AudioEngine problem
     }
 
     const pixelsPerBeat = 60; // Match PianoRoll spacing
@@ -225,7 +224,6 @@ export function UkuleleRoll() {
       const shouldTrigger = isTimeToTrigger && !playedNotes.current.has(noteId);
 
       if (shouldTrigger) {
-        console.log(`🎵 Playing ${note.pitch} at beat ${latestBeat.toFixed(2)} (position: ${Math.round(noteStartX)}px)`);
         playedNotes.current.add(noteId);
 
         try {
@@ -235,7 +233,7 @@ export function UkuleleRoll() {
           const durationInSeconds = (note.duration * 60) / song.tempo;
           await audioEngine.playNote(note.pitch, durationInSeconds);
         } catch (error) {
-          console.error('❌ Audio error:', error);
+          // Audio error - continue silently
         }
       }
     }
@@ -253,13 +251,7 @@ export function UkuleleRoll() {
     const lastNoteExitTime = lastNoteTime + travelTimeBeats + timeToExitScreen;
     const allNotesPlayedAndExited = playedCount >= totalNotes && latestBeat > lastNoteExitTime;
 
-    // Log progress occasionally
-    if (playedCount > 0 && Math.floor(latestBeat) % 2 === 0 && playedCount < totalNotes) {
-      console.log(`📊 Progress: ${playedCount}/${totalNotes}, last note exits at beat ${lastNoteExitTime.toFixed(1)}`);
-    }
-
     if (allNotesPlayedAndExited && totalNotes > 0 && isPlaying) {
-      console.log('🏁 PRACTICE COMPLETE!');
       audioEngine.stopPlayback();
       setIsPlaying(false);
       setCurrentBeat(0);
@@ -278,18 +270,13 @@ export function UkuleleRoll() {
       // When not playing, show static lines across the screen
       const beatsToShow = Math.ceil(containerWidth / pixelsPerBeat) + 2;
 
-      console.log(`🔍 Debug: containerWidth=${containerWidth}, pixelsPerBeat=${pixelsPerBeat}, beatsToShow=${beatsToShow}`);
-
       for (let beat = 0; beat <= beatsToShow; beat++) {
         const beatX = beat * pixelsPerBeat;
 
         // Only show beat lines that are visible on screen
         if (beatX > containerWidth + 50) {
-          console.log(`❌ Skipping beat ${beat} at x=${beatX} (beyond ${containerWidth + 50})`);
           continue;
         }
-
-        console.log(`✅ Adding beat ${beat} at x=${beatX}`);
 
         // Check if this is a measure start (every 4 beats)
         const isMeasureStart = beat % 4 === 0;
@@ -304,8 +291,6 @@ export function UkuleleRoll() {
           );
         }
       }
-
-      console.log(`📊 Total lines rendered: ${lines.length}`);
     } else {
       // When playing, show moving lines
       const startBeat = Math.floor(latestBeat - travelTimeBeats) - 5;
@@ -345,10 +330,6 @@ export function UkuleleRoll() {
 
     const latestBeat = currentBeatRef.current;
 
-    // Debug: show song data on first render when playing
-    if (latestBeat > 0 && latestBeat < 1) {
-      console.log(`🎼 Song has ${song.notes.length} notes`, song.notes.length > 0 ? song.notes.map(n => `${n.pitch}@${n.startTime}`) : '(no notes in song!)');
-    }
 
     return song.notes.map(note => {
       // Notes move at constant speed matching editor spacing

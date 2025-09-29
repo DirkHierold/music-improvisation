@@ -51,15 +51,12 @@ export function TransportControls() {
 
       if (isPracticeMode) {
         // In practice mode, only start the beat counter without audio
-        console.log('🎯 Starting practice mode playback');
         audioEngine.startPlaybackWithoutAudio(
           song.tempo,
           (beat) => {
-            console.log(`📡 Callback received beat: ${beat.toFixed(2)}`);
             setCurrentBeat(beat);
           },
           () => {
-            console.log('🏁 Practice complete callback');
             setIsPlaying(false);
             setCurrentBeat(0);
             setCursorPosition(0);

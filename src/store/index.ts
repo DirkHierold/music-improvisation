@@ -122,9 +122,7 @@ export const useStore = create<AppState>((set) => ({
 
   setIsPlaying: (isPlaying) => set({ isPlaying }),
   setCurrentBeat: (currentBeat) => {
-    console.log(`🏪 STORE: Setting currentBeat to ${currentBeat.toFixed(2)}`);
     set({ currentBeat });
-    console.log(`🏪 STORE: currentBeat set successfully`);
   },
   setCursorPosition: (cursorPosition) => set({ cursorPosition }),
   setSelectedDuration: (selectedDuration) => set({ selectedDuration }),

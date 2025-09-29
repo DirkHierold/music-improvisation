@@ -17,13 +17,10 @@ class AudioEngine {
         },
         baseUrl: 'https://tonejs.github.io/audio/salamander/',
         onload: () => {
-          console.log('Piano samples loaded');
           this.isInitialized = true;
           resolve();
         },
         onerror: (error) => {
-          console.error('Failed to load piano samples:', error);
-          console.warn('Will use fallback synthesis');
           this.isInitialized = true; // Set to true so playNote can use fallback
           resolve(); // Don't reject, just use fallback
         }
@@ -32,7 +29,6 @@ class AudioEngine {
       // Timeout fallback
       setTimeout(() => {
         if (!this.isInitialized) {
-          console.warn('Sample loading timed out, using fallback synthesis');
           this.isInitialized = true;
           resolve();
         }
@@ -42,12 +38,10 @@ class AudioEngine {
 
   async playNote(pitch: string, duration: number = 1) {
     if (!this.sampler) {
-      console.warn('AudioEngine not initialized');
       return;
     }
 
     if (!this.isInitialized) {
-      console.warn('AudioEngine samples not loaded yet');
       return;
     }
 
@@ -56,8 +50,6 @@ class AudioEngine {
     try {
       this.sampler.triggerAttackRelease(pitch, duration);
     } catch (error) {
-      console.error('Error playing note:', error);
-      console.warn('Retrying with basic oscillator');
       // Fallback to basic oscillator if samples fail
       try {
         const synth = new Tone.Synth().toDestination();
@@ -67,7 +59,7 @@ class AudioEngine {
           synth.dispose();
         }, (duration + 0.1) * 1000);
       } catch (fallbackError) {
-        console.error('Fallback oscillator also failed:', fallbackError);
+        // Both failed - continue silently
       }
     }
   }
@@ -115,14 +107,12 @@ class AudioEngine {
 
     // Stop practice mode
     if ((this as any)._practiceInterval) {
-      console.log('🛑 Stopping practice interval');
       clearInterval((this as any)._practiceInterval);
       delete (this as any)._practiceInterval;
     }
 
     // Stop practice animation
     if ((this as any)._practiceAnimationId) {
-      console.log('🛑 Stopping practice animation');
       cancelAnimationFrame((this as any)._practiceAnimationId);
       delete (this as any)._practiceAnimationId;
     }
@@ -137,30 +127,19 @@ class AudioEngine {
     const startTime = performance.now();
     const beatsPerSecond = tempo / 60;
 
-    console.log(`🎵 Starting practice mode: ${tempo} BPM, ${beatsPerSecond} beats/sec`);
 
     const updateLoop = () => {
       const elapsedSeconds = (performance.now() - startTime) / 1000;
       const currentBeat = elapsedSeconds * beatsPerSecond;
 
-      // Log less frequently to reduce spam
-      if (Math.floor(currentBeat * 10) !== Math.floor(((this as any)._lastLoggedBeat || 0) * 10)) {
-        console.log(`⏱️ Practice beat: ${currentBeat.toFixed(2)} - calling onBeat()`);
-        (this as any)._lastLoggedBeat = currentBeat;
-      }
-
       try {
         onBeat(currentBeat);
-        if (Math.floor(currentBeat * 10) !== Math.floor(((this as any)._lastLoggedBeat || 0) * 10)) {
-          console.log(`✅ onBeat() called successfully`);
-        }
       } catch (error) {
-        console.error('❌ Error in onBeat callback:', error);
+        // Error in onBeat callback - continue silently
       }
 
       // Auto-complete after 10 minutes
       if (elapsedSeconds > 600) {
-        console.log('⏰ Practice mode timeout');
         this.stopPlayback();
         onComplete();
         return;
