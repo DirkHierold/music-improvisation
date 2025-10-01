@@ -218,8 +218,6 @@ export function UkuleleRoll() {
       // Trigger logic: trigger when note reaches trigger line after traveling from right
       const travelTimeBeats = (containerWidth - 30) / pixelsPerBeat; // Time to travel from right edge to trigger
       const actualTriggerTime = note.startTime + travelTimeBeats; // When note should actually be triggered
-      const timeDifference = latestBeat - actualTriggerTime;
-      const noteStartX = 30 - (timeDifference * pixelsPerBeat);
       const isTimeToTrigger = latestBeat >= actualTriggerTime - 0.1 && latestBeat <= actualTriggerTime + 0.1;
       const shouldTrigger = isTimeToTrigger && !playedNotes.current.has(noteId);
 

@@ -8,7 +8,7 @@ class AudioEngine {
   async initialize() {
     if (this.isInitialized) return;
 
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<void>((resolve) => {
       this.sampler = new Tone.Sampler({
         urls: {
           C3: 'C3.mp3',
@@ -20,7 +20,7 @@ class AudioEngine {
           this.isInitialized = true;
           resolve();
         },
-        onerror: (error) => {
+        onerror: () => {
           this.isInitialized = true; // Set to true so playNote can use fallback
           resolve(); // Don't reject, just use fallback
         }
