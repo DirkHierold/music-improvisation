@@ -90,7 +90,26 @@ export function NoteButtons() {
 
   const handleNoteClick = async (noteName: string) => {
     await audioEngine.initialize();
-    const pitch = `${noteName}4`;
+
+    // Calculate the correct octave based on the current key
+    const getCorrectOctave = (noteName: string, key: string): number => {
+      const scaleNotes = MAJOR_SCALES[key] || MAJOR_SCALES['C Major'];
+      const rootNote = scaleNotes[0];
+
+      const pitchOrder = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+      const rootIndex = pitchOrder.indexOf(rootNote.replace('b', '#'));
+      const noteIndex = pitchOrder.indexOf(noteName.replace('b', '#'));
+
+      // Base octave is 4 for all keys
+      const baseOctave = 4;
+
+      // If the note comes before the root note in chromatic order, it's in the next octave
+      return noteIndex < rootIndex ? baseOctave + 1 : baseOctave;
+    };
+
+    const correctOctave = getCorrectOctave(noteName, song.key);
+    const pitch = `${noteName}${correctOctave}`;
+
     audioEngine.playNote(pitch, selectedDuration);
 
     const insertPosition = isPlaying ? currentBeat : cursorPosition;

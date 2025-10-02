@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 import { useStore } from '../store';
 import { MAJOR_SCALES, CHROMATIC_NOTES, NOTE_COLORS, NoteDuration } from '../types';
@@ -125,55 +125,132 @@ const PlaybackCursor = styled.div.attrs<{ $position: number }>(props => ({
 
 export function PianoRoll() {
   const { song, isChromatic, selectedDuration, currentBeat, cursorPosition, isPlaying, addNote, updateNote, deleteNote, selectedNoteId, setSelectedNoteId, setSelectedDuration, setCursorPosition } = useStore();
+
+  // Extract key explicitly for better React dependency tracking
+  const currentKey = song.key;
   const [draggedNote, setDraggedNote] = useState<string | null>(null);
   const [resizingNote, setResizingNote] = useState<string | null>(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0, startTime: 0, pitch: '' });
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const baseNotes = isChromatic
-    ? CHROMATIC_NOTES.map(n => `${n}4`)
-    : (MAJOR_SCALES[song.key] || MAJOR_SCALES['C Major']).map(n => `${n}4`);
+  // Calculate base octave and notes based on the key, memoized to react to key changes
+  const baseNotes = useMemo(() => {
+    // Calculate base octave based on the key's root note
+    const getBaseOctave = (key: string): number => {
+      const scaleNotes = MAJOR_SCALES[key] || MAJOR_SCALES['C Major'];
+      const rootNote = scaleNotes[0]; // First note of the scale is the root
 
-  const pitchOrder = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-  const getOrder = (pitch: string) => {
-    const noteName = pitch.replace(/\d+/, '');
-    const octave = parseInt(pitch.match(/\d+/)?.[0] || '4');
-    const noteIndex = pitchOrder.indexOf(noteName);
-    return octave * 12 + noteIndex;
-  };
+      // Map root notes to their preferred octave for better display
+      const octaveMap: Record<string, number> = {
+        'C': 4, 'C#': 4, 'Db': 4,
+        'D': 4, 'D#': 4, 'Eb': 4,
+        'E': 4, 'F': 4, 'F#': 4, 'Gb': 4,
+        'G': 4, 'G#': 4, 'Ab': 4,
+        'A': 4, 'A#': 4, 'Bb': 4,
+        'B': 4
+      };
 
-  const usedPitches = song.notes.map(n => n.pitch);
-  const baseOrder = baseNotes.map(getOrder);
-  const minBaseOrder = Math.min(...baseOrder);
-  const maxBaseOrder = Math.max(...baseOrder);
+      return octaveMap[rootNote] || 4;
+    };
 
-  let minOrder = minBaseOrder;
-  let maxOrder = maxBaseOrder;
+    const baseOctave = getBaseOctave(currentKey);
 
-  if (usedPitches.length > 0) {
-    const usedOrders = usedPitches.map(getOrder);
-    minOrder = Math.min(minBaseOrder, ...usedOrders);
-    maxOrder = Math.max(maxBaseOrder, ...usedOrders);
-  }
-
-  const allPitches: string[] = [];
-  for (let order = minOrder; order <= maxOrder; order++) {
-    const octave = Math.floor(order / 12);
-    const noteIndex = order % 12;
-    const pitch = pitchOrder[noteIndex] + octave;
-
+    // Generate base notes for the current key and octave
     if (isChromatic) {
-      allPitches.push(pitch);
+      return CHROMATIC_NOTES.map(n => `${n}${baseOctave}`);
     } else {
-      const basePitchNames = baseNotes.map(bn => bn.replace(/\d+/, ''));
-      const pitchName = pitch.replace(/\d+/, '');
-      if (basePitchNames.includes(pitchName) || usedPitches.includes(pitch)) {
-        allPitches.push(pitch);
-      }
-    }
-  }
+      const scaleNotes = MAJOR_SCALES[currentKey] || MAJOR_SCALES['C Major'];
+      const rootNote = scaleNotes[0];
 
-  const reversedNotes = allPitches.reverse();
+      // Create a full octave from root note to next root note
+      const pitchOrder = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+      const rootIndex = pitchOrder.indexOf(rootNote.replace('b', '#'));
+
+      const notes: string[] = [];
+
+      // Add notes from the scale, calculating correct octaves
+      scaleNotes.forEach((note, index) => {
+        const noteIndex = pitchOrder.indexOf(note.replace('b', '#'));
+        // If the note comes before the root note in chromatic order, it's in the next octave
+        const octave = noteIndex < rootIndex ? baseOctave + 1 : baseOctave;
+        notes.push(`${note}${octave}`);
+      });
+
+      return notes;
+    }
+  }, [currentKey, isChromatic]); // Re-calculate when key or chromatic mode changes
+
+
+  // Calculate all pitches to display, memoized to react to key and note changes
+  const allPitches = useMemo(() => {
+    if (isChromatic) {
+      // For chromatic mode, use the old logic
+      const pitchOrder = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+      const getOrder = (pitch: string) => {
+        const noteName = pitch.replace(/\d+/, '');
+        const octave = parseInt(pitch.match(/\d+/)?.[0] || '4');
+        const noteIndex = pitchOrder.indexOf(noteName);
+        return octave * 12 + noteIndex;
+      };
+
+      const usedPitches = song.notes.map(n => n.pitch);
+      const baseOrder = baseNotes.map(getOrder);
+      const minBaseOrder = Math.min(...baseOrder);
+      const maxBaseOrder = Math.max(...baseOrder);
+
+      let minOrder = minBaseOrder;
+      let maxOrder = maxBaseOrder;
+
+      if (usedPitches.length > 0) {
+        const usedOrders = usedPitches.map(getOrder);
+        const minUsedOrder = Math.min(...usedOrders);
+        const maxUsedOrder = Math.max(...usedOrders);
+
+        if (minUsedOrder < minBaseOrder) {
+          minOrder = minUsedOrder;
+        }
+        if (maxUsedOrder > maxBaseOrder) {
+          maxOrder = maxUsedOrder;
+        }
+      }
+
+      const pitches: string[] = [];
+      for (let order = minOrder; order <= maxOrder; order++) {
+        const octave = Math.floor(order / 12);
+        const noteIndex = order % 12;
+        const pitch = pitchOrder[noteIndex] + octave;
+        pitches.push(pitch);
+      }
+
+      return pitches;
+    } else {
+      // For scale mode, use the base notes directly and extend if needed
+      const usedPitches = song.notes.map(n => n.pitch);
+      let pitches = [...baseNotes];
+
+      // Add any used pitches that are not in the base notes
+      usedPitches.forEach(pitch => {
+        if (!pitches.includes(pitch)) {
+          pitches.push(pitch);
+        }
+      });
+
+      // Sort pitches by their chromatic order for display
+      const pitchOrder = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+      const getOrder = (pitch: string) => {
+        const noteName = pitch.replace(/\d+/, '');
+        const octave = parseInt(pitch.match(/\d+/)?.[0] || '4');
+        const noteIndex = pitchOrder.indexOf(noteName);
+        return octave * 12 + noteIndex;
+      };
+
+      pitches.sort((a, b) => getOrder(a) - getOrder(b));
+
+      return pitches;
+    }
+  }, [baseNotes, song.notes, isChromatic]); // Re-calculate when key, notes, or chromatic mode changes
+
+  const reversedNotes = [...allPitches].reverse();
   const beatsPerRow = 20;
 
   const maxNoteEnd = song.notes.reduce((max, note) =>
