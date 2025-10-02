@@ -149,7 +149,7 @@ export function UkuleleRoll() {
   const currentBeatRef = useRef<number>(0); // Fix closure issue!
   const [containerWidth, setContainerWidth] = useState(800);
 
-  const { song, currentBeat, isPlaying, setIsPlaying, setCurrentBeat } = useStore();
+  const { song, currentBeat, isPlaying, setIsPlaying, setCurrentBeat, setCursorPosition } = useStore();
 
   // Update container width when component mounts or resizes
   useEffect(() => {
@@ -253,6 +253,13 @@ export function UkuleleRoll() {
       audioEngine.stopPlayback();
       setIsPlaying(false);
       setCurrentBeat(0);
+
+      // Calculate end position after the last note
+      const endPosition = song.notes.length > 0
+        ? Math.max(...song.notes.map(note => note.startTime + note.duration))
+        : 0;
+      setCursorPosition(endPosition);
+
       playedNotes.current.clear();
     }
   };

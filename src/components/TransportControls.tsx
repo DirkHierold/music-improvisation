@@ -49,6 +49,23 @@ export function TransportControls() {
       await audioEngine.initialize();
       setIsPlaying(true);
 
+      // Calculate the end position of the song
+      const songEndPosition = song.notes.length > 0
+        ? Math.max(...song.notes.map(note => note.startTime + note.duration))
+        : 0;
+
+      // Determine start position based on cursor location
+      let startPosition = cursorPosition;
+
+      // If cursor is at the end (or very close to it), start from beginning
+      if (Math.abs(cursorPosition - songEndPosition) < 0.1) {
+        startPosition = 0;
+        setCursorPosition(0);
+      }
+
+      // Initialize currentBeat to the start position to avoid visual jump
+      setCurrentBeat(startPosition);
+
       if (isPracticeMode) {
         // In practice mode, only start the beat counter without audio
         audioEngine.startPlaybackWithoutAudio(
@@ -59,8 +76,9 @@ export function TransportControls() {
           () => {
             setIsPlaying(false);
             setCurrentBeat(0);
-            setCursorPosition(0);
-          }
+            setCursorPosition(songEndPosition);
+          },
+          startPosition
         );
       } else {
         // Normal editor mode with audio
@@ -68,11 +86,13 @@ export function TransportControls() {
           song.notes,
           song.tempo,
           (beat) => setCurrentBeat(beat),
-          () => {
+          (endPosition) => {
             setIsPlaying(false);
             setCurrentBeat(0);
-            setCursorPosition(0);
-          }
+            // Position cursor after the last note
+            setCursorPosition(endPosition || 0);
+          },
+          startPosition
         );
       }
     } else {

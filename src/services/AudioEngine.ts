@@ -65,32 +65,38 @@ class AudioEngine {
     }
   }
 
-  async startPlayback(notes: Note[], tempo: number, onBeat: (beat: number) => void, onComplete: () => void) {
+  async startPlayback(notes: Note[], tempo: number, onBeat: (beat: number) => void, onComplete: (endPosition?: number) => void, startPosition: number = 0) {
     await Tone.start();
     Tone.getTransport().stop();
     Tone.getTransport().cancel();
     Tone.getTransport().bpm.value = tempo;
 
-    notes.forEach((note) => {
+    // Filter notes that should be played (start after the current position)
+    const notesToPlay = notes.filter(note => note.startTime >= startPosition);
+
+    notesToPlay.forEach((note) => {
       Tone.getTransport().schedule((time) => {
         const durationInSeconds = (note.duration * 60) / tempo;
         this.sampler?.triggerAttackRelease(note.pitch, durationInSeconds, time);
-      }, `0:${note.startTime}`);
+      }, `0:${note.startTime - startPosition}`);
     });
 
     const maxTime = notes.reduce((max, note) => Math.max(max, note.startTime + note.duration), 0);
 
+    // Schedule completion based on the original song length, adjusted for start position
+    const playbackDuration = Math.max(0, maxTime - startPosition);
+
     Tone.getTransport().schedule((time) => {
       Tone.getDraw().schedule(() => {
         this.stopPlayback();
-        onComplete();
+        onComplete(maxTime);
       }, time);
-    }, `0:${maxTime}`);
+    }, `0:${playbackDuration}`);
 
     Tone.getTransport().start();
 
     const updateInterval = setInterval(() => {
-      const currentBeat = Tone.getTransport().seconds * (tempo / 60);
+      const currentBeat = startPosition + (Tone.getTransport().seconds * (tempo / 60));
       onBeat(currentBeat);
     }, 50);
 
@@ -119,7 +125,7 @@ class AudioEngine {
     }
   }
 
-  async startPlaybackWithoutAudio(tempo: number, onBeat: (beat: number) => void, onComplete: () => void) {
+  async startPlaybackWithoutAudio(tempo: number, onBeat: (beat: number) => void, onComplete: () => void, startPosition: number = 0) {
     await Tone.start();
 
     // Stop any existing playback
@@ -131,7 +137,7 @@ class AudioEngine {
 
     const updateLoop = () => {
       const elapsedSeconds = (performance.now() - startTime) / 1000;
-      const currentBeat = elapsedSeconds * beatsPerSecond;
+      const currentBeat = startPosition + (elapsedSeconds * beatsPerSecond);
 
       try {
         onBeat(currentBeat);
