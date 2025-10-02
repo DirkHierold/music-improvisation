@@ -63,10 +63,12 @@ const Select = styled.select`
 `;
 
 export function SaveLoadButtons() {
-  const { saveSong, loadSong, getSavedSongs } = useStore();
+  const { saveSong, loadSong, getSavedSongs, loadPresetSong, getPresetSongs } = useStore();
   const [songName, setSongName] = useState('');
   const [selectedSong, setSelectedSong] = useState('');
+  const [selectedPreset, setSelectedPreset] = useState('');
   const savedSongs = getSavedSongs();
+  const presetSongs = getPresetSongs();
 
   const handleSave = () => {
     if (songName.trim()) {
@@ -83,6 +85,17 @@ export function SaveLoadButtons() {
         alert(`Song "${selectedSong}" loaded successfully!`);
       } else {
         alert(`Failed to load song "${selectedSong}"`);
+      }
+    }
+  };
+
+  const handleLoadPreset = () => {
+    if (selectedPreset) {
+      const success = loadPresetSong(selectedPreset);
+      if (success) {
+        alert(`Preset song "${selectedPreset}" loaded successfully!`);
+      } else {
+        alert(`Failed to load preset song "${selectedPreset}"`);
       }
     }
   };
@@ -110,6 +123,19 @@ export function SaveLoadButtons() {
         ))}
       </Select>
       <Button onClick={handleLoad}>Load</Button>
+
+      <Select
+        value={selectedPreset}
+        onChange={(e) => setSelectedPreset(e.target.value)}
+      >
+        <option value="">Select a preset...</option>
+        {presetSongs.map((name) => (
+          <option key={name} value={name}>
+            {name}
+          </option>
+        ))}
+      </Select>
+      <Button onClick={handleLoadPreset}>Load Preset</Button>
     </Container>
   );
 }

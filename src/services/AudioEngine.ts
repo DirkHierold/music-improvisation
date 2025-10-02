@@ -20,7 +20,8 @@ class AudioEngine {
           this.isInitialized = true;
           resolve();
         },
-        onerror: () => {
+        onerror: (error) => {
+          console.warn('Sampler loading failed, using fallback:', error);
           this.isInitialized = true; // Set to true so playNote can use fallback
           resolve(); // Don't reject, just use fallback
         }
