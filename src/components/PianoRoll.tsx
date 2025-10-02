@@ -169,7 +169,7 @@ export function PianoRoll() {
       const notes: string[] = [];
 
       // Add notes from the scale, calculating correct octaves
-      scaleNotes.forEach((note, index) => {
+      scaleNotes.forEach((note) => {
         const noteIndex = pitchOrder.indexOf(note.replace('b', '#'));
         // If the note comes before the root note in chromatic order, it's in the next octave
         const octave = noteIndex < rootIndex ? baseOctave + 1 : baseOctave;

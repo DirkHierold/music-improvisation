@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { Song, Note, NoteDuration } from '../types';
-import { presetSongs } from '../data/presetSongs';
 
 interface AppState {
   song: Song;
@@ -28,8 +27,6 @@ interface AppState {
   saveSong: (name: string) => void;
   loadSong: (name: string) => boolean;
   getSavedSongs: () => string[];
-  loadPresetSong: (name: string) => boolean;
-  getPresetSongs: () => string[];
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -159,25 +156,6 @@ export const useStore = create<AppState>((set) => ({
   getSavedSongs: () => {
     const savedSongs = JSON.parse(localStorage.getItem('savedSongs') || '{}');
     return Object.keys(savedSongs);
-  },
-
-  loadPresetSong: (name) => {
-    const song = presetSongs[name];
-    if (song) {
-      set({
-        song,
-        cursorPosition: 0,
-        selectedNoteId: null,
-        isPlaying: false,
-        currentBeat: 0
-      });
-      return true;
-    }
-    return false;
-  },
-
-  getPresetSongs: () => {
-    return Object.keys(presetSongs);
   },
 }));
 
