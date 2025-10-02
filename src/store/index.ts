@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { Song, Note, NoteDuration } from '../types';
+import { saveMusicXMLFile, loadMusicXMLFile } from '../utils/musicxml';
 
 interface AppState {
   song: Song;
@@ -24,9 +25,9 @@ interface AppState {
   setIsChromatic: (isChromatic: boolean) => void;
   setSelectedNoteId: (id: string | null) => void;
   setIsPracticeMode: (isPracticeMode: boolean) => void;
-  saveSong: (name: string) => void;
-  loadSong: (name: string) => boolean;
-  getSavedSongs: () => string[];
+  saveSong: (filename: string) => Promise<void>;
+  loadSong: (file: File) => Promise<boolean>;
+  setSong: (song: Song) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -130,17 +131,14 @@ export const useStore = create<AppState>((set) => ({
   setSelectedNoteId: (selectedNoteId) => set({ selectedNoteId }),
   setIsPracticeMode: (isPracticeMode) => set({ isPracticeMode }),
 
-  saveSong: (name) => set((state) => {
-    const savedSongs = JSON.parse(localStorage.getItem('savedSongs') || '{}');
-    savedSongs[name] = state.song;
-    localStorage.setItem('savedSongs', JSON.stringify(savedSongs));
-    return state;
-  }),
+  saveSong: async (filename: string) => {
+    const state = useStore.getState();
+    await saveMusicXMLFile(state.song, filename);
+  },
 
-  loadSong: (name) => {
-    const savedSongs = JSON.parse(localStorage.getItem('savedSongs') || '{}');
-    const song = savedSongs[name];
-    if (song) {
+  loadSong: async (file: File) => {
+    try {
+      const song = await loadMusicXMLFile(file);
       set({
         song,
         cursorPosition: 0,
@@ -149,14 +147,19 @@ export const useStore = create<AppState>((set) => ({
         currentBeat: 0
       });
       return true;
+    } catch (error) {
+      console.error('Failed to load MusicXML file:', error);
+      return false;
     }
-    return false;
   },
 
-  getSavedSongs: () => {
-    const savedSongs = JSON.parse(localStorage.getItem('savedSongs') || '{}');
-    return Object.keys(savedSongs);
-  },
+  setSong: (song) => set({
+    song,
+    cursorPosition: 0,
+    selectedNoteId: null,
+    isPlaying: false,
+    currentBeat: 0
+  }),
 }));
 
 function transposeNotes(notes: Note[], oldKey: string, newKey: string): Note[] {
