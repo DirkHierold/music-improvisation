@@ -91,6 +91,7 @@ export function musicXMLToSong(xmlString: string): Song {
   const divisions = parseInt(xmlDoc.querySelector('attributes divisions')?.textContent || '4');
 
   let currentTime = 0;
+  let lastNonChordTime = 0;
 
   noteElements.forEach((noteElement) => {
     // Check if it's a rest
@@ -98,11 +99,15 @@ export function musicXMLToSong(xmlString: string): Song {
       const durationElement = noteElement.querySelector('duration');
       const duration = durationElement ? parseInt(durationElement.textContent || '0') : 0;
       currentTime += duration / divisions;
+      lastNonChordTime = currentTime;
       return;
     }
 
     const pitchElement = noteElement.querySelector('pitch');
     if (!pitchElement) return;
+
+    // Check if this is a chord note
+    const isChord = noteElement.querySelector('chord') !== null;
 
     const step = pitchElement.querySelector('step')?.textContent || 'C';
     const alter = pitchElement.querySelector('alter')?.textContent;
@@ -117,14 +122,21 @@ export function musicXMLToSong(xmlString: string): Song {
     const durationElement = noteElement.querySelector('duration');
     const duration = durationElement ? parseInt(durationElement.textContent || '0') / divisions : 1;
 
+    // If this is a chord note, use the last non-chord time
+    const noteStartTime = isChord ? lastNonChordTime : currentTime;
+
     notes.push({
       id: crypto.randomUUID(),
       pitch,
-      startTime: currentTime,
+      startTime: noteStartTime,
       duration
     });
 
-    currentTime += duration;
+    // Only advance time if it's not a chord note
+    if (!isChord) {
+      currentTime += duration;
+      lastNonChordTime = noteStartTime;
+    }
   });
 
   return {
@@ -194,10 +206,13 @@ function generateNotesXML(notes: Note[], divisions: number, beatsPerMeasure: num
 
   const xmlParts: string[] = [];
   let currentTime = 0;
+  let previousStartTime: number | null = null;
 
   notes.forEach((note) => {
-    // Add rest if there's a gap before this note
-    if (note.startTime > currentTime) {
+    const isChord = previousStartTime !== null && note.startTime === previousStartTime;
+
+    // Add rest if there's a gap before this note (and it's not a chord)
+    if (!isChord && note.startTime > currentTime) {
       const restDuration = (note.startTime - currentTime) * divisions;
       const restType = getDurationType(note.startTime - currentTime);
       xmlParts.push(`      <note>
@@ -212,7 +227,7 @@ function generateNotesXML(notes: Note[], divisions: number, beatsPerMeasure: num
     const noteDuration = note.duration * divisions;
     const noteType = getDurationType(note.duration);
 
-    xmlParts.push(`      <note>
+    xmlParts.push(`      <note>${isChord ? '\n        <chord/>' : ''}
         <pitch>
           <step>${pitch.charAt(0)}</step>
 ${pitch.includes('#') ? '          <alter>1</alter>' : ''}${pitch.includes('b') ? '          <alter>-1</alter>' : ''}
@@ -222,7 +237,12 @@ ${pitch.includes('#') ? '          <alter>1</alter>' : ''}${pitch.includes('b') 
         <type>${noteType}</type>
       </note>`);
 
-    currentTime = note.startTime + note.duration;
+    previousStartTime = note.startTime;
+
+    // Only advance time if it's not a chord
+    if (!isChord) {
+      currentTime = note.startTime + note.duration;
+    }
   });
 
   return xmlParts.join('\n');
