@@ -11,6 +11,10 @@ interface AppState {
   isChromatic: boolean;
   selectedNoteId: string | null;
   isPracticeMode: boolean;
+  history: {
+    past: Song[];
+    future: Song[];
+  };
 
   setTempo: (tempo: number) => void;
   setMeter: (beatsPerMeasure: number) => void;
@@ -28,9 +32,24 @@ interface AppState {
   saveSong: (filename: string) => Promise<void>;
   loadSong: (file: File) => Promise<boolean>;
   setSong: (song: Song) => void;
+  undo: () => void;
+  redo: () => void;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
 }
 
-export const useStore = create<AppState>((set) => ({
+const MAX_HISTORY = 50;
+
+function pushHistory(state: AppState): Partial<AppState> {
+  return {
+    history: {
+      past: [...state.history.past, state.song].slice(-MAX_HISTORY),
+      future: [],
+    },
+  };
+}
+
+export const useStore = create<AppState>((set, get) => ({
   song: {
     tempo: 120,
     meter: {
@@ -47,12 +66,18 @@ export const useStore = create<AppState>((set) => ({
   isChromatic: false,
   selectedNoteId: null,
   isPracticeMode: false,
+  history: {
+    past: [],
+    future: [],
+  },
 
   setTempo: (tempo) => set((state) => ({
+    ...pushHistory(state),
     song: { ...state.song, tempo }
   })),
 
   setMeter: (beatsPerMeasure) => set((state) => ({
+    ...pushHistory(state),
     song: {
       ...state.song,
       meter: { ...state.song.meter, beatsPerMeasure }
@@ -63,6 +88,7 @@ export const useStore = create<AppState>((set) => ({
     const oldKey = state.song.key;
     const transposedNotes = transposeNotes(state.song.notes, oldKey, key);
     return {
+      ...pushHistory(state),
       song: { ...state.song, key, notes: transposedNotes }
     };
   }),
@@ -70,6 +96,7 @@ export const useStore = create<AppState>((set) => ({
   addNote: (noteData) => set((state) => {
     const newId = crypto.randomUUID();
     return {
+      ...pushHistory(state),
       song: {
         ...state.song,
         notes: [...state.song.notes, { ...noteData, id: newId }]
@@ -81,6 +108,7 @@ export const useStore = create<AppState>((set) => ({
   }),
 
   updateNote: (id, updates) => set((state) => ({
+    ...pushHistory(state),
     song: {
       ...state.song,
       notes: state.song.notes.map((note) =>
@@ -109,6 +137,7 @@ export const useStore = create<AppState>((set) => ({
     }
 
     return {
+      ...pushHistory(state),
       song: {
         ...state.song,
         notes: remainingNotes
@@ -153,13 +182,47 @@ export const useStore = create<AppState>((set) => ({
     }
   },
 
-  setSong: (song) => set({
+  setSong: (song) => set((state) => ({
+    ...pushHistory(state),
     song,
     cursorPosition: 0,
     selectedNoteId: null,
     isPlaying: false,
     currentBeat: 0
+  })),
+
+  undo: () => set((state) => {
+    if (state.history.past.length === 0) return state;
+
+    const previous = state.history.past[state.history.past.length - 1];
+    const newPast = state.history.past.slice(0, -1);
+
+    return {
+      song: previous,
+      history: {
+        past: newPast,
+        future: [state.song, ...state.history.future],
+      },
+    };
   }),
+
+  redo: () => set((state) => {
+    if (state.history.future.length === 0) return state;
+
+    const next = state.history.future[0];
+    const newFuture = state.history.future.slice(1);
+
+    return {
+      song: next,
+      history: {
+        past: [...state.history.past, state.song],
+        future: newFuture,
+      },
+    };
+  }),
+
+  canUndo: () => get().history.past.length > 0,
+  canRedo: () => get().history.future.length > 0,
 }));
 
 function transposeNotes(notes: Note[], oldKey: string, newKey: string): Note[] {

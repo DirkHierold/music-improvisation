@@ -6,6 +6,7 @@ import { DurationPanel } from './components/DurationPanel';
 import { NoteButtons } from './components/NoteButtons';
 import { PianoRoll } from './components/PianoRoll';
 import { SaveLoadButtons } from './components/SaveLoadButtons';
+import { UndoRedoButtons } from './components/UndoRedoButtons';
 import { UkuleleRoll } from './components/UkuleleRoll';
 import { useStore } from './store';
 
@@ -53,6 +54,7 @@ function App() {
         <TopBar>
           <TransportControls />
           <MusicalParameters />
+          <UndoRedoButtons />
           <SaveLoadButtons />
         </TopBar>
         {isPracticeMode ? (
