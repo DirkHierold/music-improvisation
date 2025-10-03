@@ -1,12 +1,31 @@
 import styled from 'styled-components';
 import { useStore } from '../store';
-import { MAJOR_SCALES, CHROMATIC_NOTES, NOTE_COLORS } from '../types';
+import { MAJOR_SCALES, CHROMATIC_NOTES, NOTE_COLORS, NoteDuration } from '../types';
 import { audioEngine } from '../services/AudioEngine';
 
 const Container = styled.div`
   display: flex;
+  gap: 20px;
+  align-items: flex-start;
+`;
+
+const NotesSection = styled.div`
+  display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 1;
+`;
+
+const DurationSection = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const DurationButtonsRow = styled.div`
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
 `;
 
 const Header = styled.div`
@@ -81,8 +100,31 @@ const NoteButton = styled.button<{ $color: string }>`
   }
 `;
 
+const DurationButton = styled.button<{ $selected: boolean }>`
+  background-color: ${props => props.$selected ? '#5dade2' : '#3c3c3c'};
+  border: 1px solid #555;
+  border-radius: 3px;
+  color: #d3d3d3;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-size: 14px;
+
+  &:hover {
+    background-color: ${props => props.$selected ? '#3498db' : '#4a4a4a'};
+  }
+`;
+
+const durations: { value: NoteDuration; label: string }[] = [
+  { value: 0.25, label: '1/4' },
+  { value: 0.5, label: '1/2' },
+  { value: 1, label: '1' },
+  { value: 2, label: '2' },
+  { value: 4, label: '4' },
+];
+
 export function NoteButtons() {
-  const { song, isChromatic, setIsChromatic, selectedDuration, cursorPosition, currentBeat, isPlaying, addNote } = useStore();
+  const { song, isChromatic, setIsChromatic, selectedDuration, setSelectedDuration, selectedNoteId, updateNote, setCursorPosition, cursorPosition, currentBeat, isPlaying, addNote } = useStore();
 
   const notes = isChromatic
     ? CHROMATIC_NOTES
@@ -135,30 +177,76 @@ export function NoteButtons() {
     });
   };
 
+  const handleDurationClick = (duration: NoteDuration) => {
+    setSelectedDuration(duration);
+
+    if (selectedNoteId) {
+      const note = song.notes.find(n => n.id === selectedNoteId);
+      if (!note) return;
+
+      const oldEndTime = note.startTime + note.duration;
+      const newEndTime = note.startTime + duration;
+
+      if (newEndTime > oldEndTime) {
+        const overlappingNotes = song.notes.filter(
+          n => n.id !== selectedNoteId && n.pitch === note.pitch && n.startTime >= oldEndTime && n.startTime < newEndTime
+        );
+
+        if (overlappingNotes.length > 0) {
+          const pushAmount = newEndTime - overlappingNotes[0].startTime;
+          song.notes
+            .filter(n => n.startTime >= overlappingNotes[0].startTime)
+            .forEach(n => {
+              updateNote(n.id, { startTime: n.startTime + pushAmount });
+            });
+        }
+      }
+
+      updateNote(selectedNoteId, { duration });
+      setCursorPosition(note.startTime + duration);
+    }
+  };
+
   return (
     <Container>
-      <Header>
-        <Title>Notes in {song.key}</Title>
-        <ChromaticToggle>
-          <span>Chromatic</span>
-          <ToggleSwitch
-            type="checkbox"
-            checked={isChromatic}
-            onChange={(e) => setIsChromatic(e.target.checked)}
-          />
-        </ChromaticToggle>
-      </Header>
-      <ButtonsRow>
-        {notes.map((note) => (
-          <NoteButton
-            key={note}
-            $color={NOTE_COLORS[note.replace('#', '').replace('b', '')] || '#888'}
-            onClick={() => handleNoteClick(note)}
-          >
-            {note}
-          </NoteButton>
-        ))}
-      </ButtonsRow>
+      <NotesSection>
+        <Header>
+          <Title>Notes in {song.key}</Title>
+          <ChromaticToggle>
+            <span>Chromatic</span>
+            <ToggleSwitch
+              type="checkbox"
+              checked={isChromatic}
+              onChange={(e) => setIsChromatic(e.target.checked)}
+            />
+          </ChromaticToggle>
+        </Header>
+        <ButtonsRow>
+          {notes.map((note) => (
+            <NoteButton
+              key={note}
+              $color={NOTE_COLORS[note.replace('#', '').replace('b', '')] || '#888'}
+              onClick={() => handleNoteClick(note)}
+            >
+              {note}
+            </NoteButton>
+          ))}
+        </ButtonsRow>
+      </NotesSection>
+      <DurationSection>
+        <Title>Duration</Title>
+        <DurationButtonsRow>
+          {durations.map(({ value, label }) => (
+            <DurationButton
+              key={value}
+              $selected={selectedDuration === value}
+              onClick={() => handleDurationClick(value)}
+            >
+              {label}
+            </DurationButton>
+          ))}
+        </DurationButtonsRow>
+      </DurationSection>
     </Container>
   );
 }

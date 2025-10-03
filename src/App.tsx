@@ -2,7 +2,6 @@ import styled from 'styled-components';
 import { GlobalStyles } from './styles/GlobalStyles';
 import { TransportControls } from './components/TransportControls';
 import { MusicalParameters } from './components/MusicalParameters';
-import { DurationPanel } from './components/DurationPanel';
 import { NoteButtons } from './components/NoteButtons';
 import { PianoRoll } from './components/PianoRoll';
 import { SaveLoadButtons } from './components/SaveLoadButtons';
@@ -67,7 +66,6 @@ function App() {
               <NoteButtons />
             </MiddleSection>
             <MainContent>
-              <DurationPanel />
               <PianoRoll />
             </MainContent>
           </>
