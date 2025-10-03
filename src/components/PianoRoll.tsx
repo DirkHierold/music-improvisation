@@ -406,15 +406,57 @@ export function PianoRoll() {
         let newPitch: string;
         if (e.key === 'ArrowUp') {
           if (noteIndex === pitchOrder.length - 1) {
-            newPitch = pitchOrder[0] + (octave + 1);
+            // When wrapping to the next octave, need to check chromatic position
+            const currentChromaticIndex = allPitchOrder.indexOf(noteName);
+            const nextScaleNote = pitchOrder[0];
+            const nextChromaticIndex = allPitchOrder.indexOf(nextScaleNote);
+
+            // If next scale note comes after current note chromatically, stay in same octave
+            // Otherwise, move to next octave
+            if (nextChromaticIndex > currentChromaticIndex) {
+              newPitch = pitchOrder[0] + octave;
+            } else {
+              newPitch = pitchOrder[0] + (octave + 1);
+            }
           } else {
-            newPitch = pitchOrder[noteIndex + 1] + octave;
+            // Check if we need to increment octave when moving to next note in scale
+            const currentChromaticIndex = allPitchOrder.indexOf(noteName);
+            const nextScaleNote = pitchOrder[noteIndex + 1];
+            const nextChromaticIndex = allPitchOrder.indexOf(nextScaleNote);
+
+            if (nextChromaticIndex > currentChromaticIndex) {
+              newPitch = pitchOrder[noteIndex + 1] + octave;
+            } else {
+              // Next scale note wraps around chromatically
+              newPitch = pitchOrder[noteIndex + 1] + (octave + 1);
+            }
           }
         } else {
           if (noteIndex === 0) {
-            newPitch = pitchOrder[pitchOrder.length - 1] + (octave - 1);
+            // When wrapping to the previous octave, need to check chromatic position
+            const currentChromaticIndex = allPitchOrder.indexOf(noteName);
+            const prevScaleNote = pitchOrder[pitchOrder.length - 1];
+            const prevChromaticIndex = allPitchOrder.indexOf(prevScaleNote);
+
+            // If previous scale note comes before current note chromatically, stay in same octave
+            // Otherwise, move to previous octave
+            if (prevChromaticIndex < currentChromaticIndex) {
+              newPitch = pitchOrder[pitchOrder.length - 1] + octave;
+            } else {
+              newPitch = pitchOrder[pitchOrder.length - 1] + (octave - 1);
+            }
           } else {
-            newPitch = pitchOrder[noteIndex - 1] + octave;
+            // Check if we need to decrement octave when moving to previous note in scale
+            const currentChromaticIndex = allPitchOrder.indexOf(noteName);
+            const prevScaleNote = pitchOrder[noteIndex - 1];
+            const prevChromaticIndex = allPitchOrder.indexOf(prevScaleNote);
+
+            if (prevChromaticIndex < currentChromaticIndex) {
+              newPitch = pitchOrder[noteIndex - 1] + octave;
+            } else {
+              // Previous scale note wraps around chromatically
+              newPitch = pitchOrder[noteIndex - 1] + (octave - 1);
+            }
           }
         }
 
