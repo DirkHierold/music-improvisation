@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Song, Note, NoteDuration } from '../types';
+import { Song, Note, Chord, NoteDuration } from '../types';
 import { saveMusicXMLFile, loadMusicXMLFile } from '../utils/musicxml';
 
 interface AppState {
@@ -10,6 +10,7 @@ interface AppState {
   selectedDuration: NoteDuration;
   isChromatic: boolean;
   selectedNoteId: string | null;
+  selectedChordId: string | null;
   isPracticeMode: boolean;
   history: {
     past: Song[];
@@ -22,12 +23,16 @@ interface AppState {
   addNote: (note: Omit<Note, 'id'>) => void;
   updateNote: (id: string, updates: Partial<Note>) => void;
   deleteNote: (id: string) => void;
+  addChord: (chord: Omit<Chord, 'id'>) => void;
+  updateChord: (id: string, updates: Partial<Chord>) => void;
+  deleteChord: (id: string) => void;
   setIsPlaying: (isPlaying: boolean) => void;
   setCurrentBeat: (beat: number) => void;
   setCursorPosition: (position: number) => void;
   setSelectedDuration: (duration: NoteDuration) => void;
   setIsChromatic: (isChromatic: boolean) => void;
   setSelectedNoteId: (id: string | null) => void;
+  setSelectedChordId: (id: string | null) => void;
   setIsPracticeMode: (isPracticeMode: boolean) => void;
   saveSong: (filename: string) => Promise<void>;
   loadSong: (file: File) => Promise<boolean>;
@@ -58,6 +63,7 @@ export const useStore = create<AppState>((set, get) => ({
     },
     key: 'C Major',
     notes: [],
+    chords: [],
   },
   isPlaying: false,
   currentBeat: 0,
@@ -65,6 +71,7 @@ export const useStore = create<AppState>((set, get) => ({
   selectedDuration: 1,
   isChromatic: false,
   selectedNoteId: null,
+  selectedChordId: null,
   isPracticeMode: false,
   history: {
     past: [],
@@ -102,6 +109,7 @@ export const useStore = create<AppState>((set, get) => ({
         notes: [...state.song.notes, { ...noteData, id: newId }]
       },
       selectedNoteId: newId,
+      selectedChordId: null, // Deselect any selected chord
       selectedDuration: noteData.duration as NoteDuration,
       cursorPosition: noteData.startTime + noteData.duration
     };
@@ -150,6 +158,64 @@ export const useStore = create<AppState>((set, get) => ({
     };
   }),
 
+  addChord: (chordData) => set((state) => {
+    const newId = crypto.randomUUID();
+    return {
+      ...pushHistory(state),
+      song: {
+        ...state.song,
+        chords: [...state.song.chords, { ...chordData, id: newId }]
+      },
+      selectedChordId: newId,
+      selectedNoteId: null, // Deselect any selected note
+      selectedDuration: chordData.duration as NoteDuration,
+      cursorPosition: chordData.startTime + chordData.duration
+    };
+  }),
+
+  updateChord: (id, updates) => set((state) => ({
+    ...pushHistory(state),
+    song: {
+      ...state.song,
+      chords: state.song.chords.map((chord) =>
+        chord.id === id ? { ...chord, ...updates } : chord
+      )
+    }
+  })),
+
+  deleteChord: (id) => set((state) => {
+    const chordToDelete = state.song.chords.find(c => c.id === id);
+    const remainingChords = state.song.chords.filter((chord) => chord.id !== id);
+
+    let newCursorPosition = 0;
+    let newSelectedChordId = null;
+
+    if (chordToDelete && remainingChords.length > 0) {
+      const chordsBefore = remainingChords
+        .filter(c => c.startTime < chordToDelete.startTime)
+        .sort((a, b) => b.startTime - a.startTime);
+
+      if (chordsBefore.length > 0) {
+        const previousChord = chordsBefore[0];
+        newCursorPosition = previousChord.startTime + previousChord.duration;
+        newSelectedChordId = previousChord.id;
+      }
+    }
+
+    return {
+      ...pushHistory(state),
+      song: {
+        ...state.song,
+        chords: remainingChords
+      },
+      cursorPosition: newCursorPosition,
+      selectedChordId: newSelectedChordId,
+      selectedDuration: newSelectedChordId
+        ? (remainingChords.find(c => c.id === newSelectedChordId)?.duration as NoteDuration || state.selectedDuration)
+        : state.selectedDuration
+    };
+  }),
+
   setIsPlaying: (isPlaying) => set({ isPlaying }),
   setCurrentBeat: (currentBeat) => {
     set({ currentBeat });
@@ -158,6 +224,7 @@ export const useStore = create<AppState>((set, get) => ({
   setSelectedDuration: (selectedDuration) => set({ selectedDuration }),
   setIsChromatic: (isChromatic) => set({ isChromatic }),
   setSelectedNoteId: (selectedNoteId) => set({ selectedNoteId }),
+  setSelectedChordId: (selectedChordId) => set({ selectedChordId }),
   setIsPracticeMode: (isPracticeMode) => set({ isPracticeMode }),
 
   saveSong: async (filename: string) => {

@@ -1,12 +1,12 @@
 import styled from 'styled-components';
 import { useStore } from '../store';
-import { MAJOR_SCALES, CHROMATIC_NOTES, NOTE_COLORS, NoteDuration } from '../types';
+import { MAJOR_SCALES, CHROMATIC_NOTES, NOTE_COLORS, NoteDuration, getChordInfo } from '../types';
 import { audioEngine } from '../services/AudioEngine';
 
 const Container = styled.div`
   display: flex;
   gap: 20px;
-  align-items: flex-start;
+  align-items: flex-end;
 `;
 
 const NotesSection = styled.div`
@@ -25,7 +25,18 @@ const DurationSection = styled.div`
 const DurationButtonsRow = styled.div`
   display: flex;
   gap: 5px;
-  flex-wrap: wrap;
+`;
+
+const ChordSection = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+`;
+
+const ChordButtonsRow = styled.div`
+  display: flex;
+  gap: 5px;
 `;
 
 const Header = styled.div`
@@ -82,7 +93,6 @@ const ToggleSwitch = styled.input`
 const ButtonsRow = styled.div`
   display: flex;
   gap: 5px;
-  flex-wrap: wrap;
 `;
 
 const NoteButton = styled.button<{ $color: string }>`
@@ -94,6 +104,13 @@ const NoteButton = styled.button<{ $color: string }>`
   cursor: pointer;
   font-weight: bold;
   transition: opacity 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 60px;
+  min-height: 60px;
 
   &:hover {
     opacity: 0.8;
@@ -102,17 +119,57 @@ const NoteButton = styled.button<{ $color: string }>`
 
 const DurationButton = styled.button<{ $selected: boolean }>`
   background-color: ${props => props.$selected ? '#5dade2' : '#3c3c3c'};
-  border: 1px solid #555;
-  border-radius: 3px;
-  color: #d3d3d3;
-  padding: 8px 12px;
+  border: none;
+  border-radius: 5px;
+  color: white;
+  padding: 10px 15px;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: opacity 0.2s, background-color 0.2s;
   font-size: 14px;
+  font-weight: bold;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 60px;
+  min-height: 60px;
 
   &:hover {
+    opacity: 0.8;
     background-color: ${props => props.$selected ? '#3498db' : '#4a4a4a'};
   }
+`;
+
+const ChordButton = styled.button<{ $color: string }>`
+  background-color: ${props => props.$color};
+  border: none;
+  border-radius: 5px;
+  color: white;
+  padding: 10px 15px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: opacity 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 60px;
+  min-height: 60px;
+
+  &:hover {
+    opacity: 0.8;
+  }
+`;
+
+const ChordName = styled.div`
+  font-size: 10px;
+  opacity: 0.8;
+`;
+
+const ChordRoman = styled.div`
+  font-size: 14px;
 `;
 
 const durations: { value: NoteDuration; label: string }[] = [
@@ -123,8 +180,10 @@ const durations: { value: NoteDuration; label: string }[] = [
   { value: 4, label: '4' },
 ];
 
+const chords: ('I' | 'II' | 'III' | 'IV' | 'V' | 'VI' | 'VII')[] = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
+
 export function NoteButtons() {
-  const { song, isChromatic, setIsChromatic, selectedDuration, setSelectedDuration, selectedNoteId, updateNote, setCursorPosition, cursorPosition, currentBeat, isPlaying, addNote } = useStore();
+  const { song, isChromatic, setIsChromatic, selectedDuration, setSelectedDuration, selectedNoteId, selectedChordId, updateNote, updateChord, setCursorPosition, cursorPosition, currentBeat, isPlaying, addNote, addChord } = useStore();
 
   const notes = isChromatic
     ? CHROMATIC_NOTES
@@ -177,6 +236,35 @@ export function NoteButtons() {
     });
   };
 
+  const handleChordClick = async (roman: 'I' | 'II' | 'III' | 'IV' | 'V' | 'VI' | 'VII') => {
+    await audioEngine.initialize();
+
+    // Play chord preview
+    audioEngine.playChord(roman, song.key, selectedDuration);
+
+    const insertPosition = isPlaying ? currentBeat : cursorPosition;
+
+    const overlappingChords = song.chords.filter(
+      c => c.startTime >= insertPosition && c.startTime < insertPosition + selectedDuration
+    );
+
+    if (overlappingChords.length > 0) {
+      const pushAmount = (insertPosition + selectedDuration) - overlappingChords[0].startTime;
+      song.chords
+        .filter(c => c.startTime >= overlappingChords[0].startTime)
+        .forEach(c => {
+          const { updateChord } = useStore.getState();
+          updateChord(c.id, { startTime: c.startTime + pushAmount });
+        });
+    }
+
+    addChord({
+      roman,
+      startTime: insertPosition,
+      duration: selectedDuration,
+    });
+  };
+
   const handleDurationClick = (duration: NoteDuration) => {
     setSelectedDuration(duration);
 
@@ -204,6 +292,30 @@ export function NoteButtons() {
 
       updateNote(selectedNoteId, { duration });
       setCursorPosition(note.startTime + duration);
+    } else if (selectedChordId) {
+      const chord = song.chords.find(c => c.id === selectedChordId);
+      if (!chord) return;
+
+      const oldEndTime = chord.startTime + chord.duration;
+      const newEndTime = chord.startTime + duration;
+
+      if (newEndTime > oldEndTime) {
+        const overlappingChords = song.chords.filter(
+          c => c.id !== selectedChordId && c.startTime >= oldEndTime && c.startTime < newEndTime
+        );
+
+        if (overlappingChords.length > 0) {
+          const pushAmount = newEndTime - overlappingChords[0].startTime;
+          song.chords
+            .filter(c => c.startTime >= overlappingChords[0].startTime)
+            .forEach(c => {
+              updateChord(c.id, { startTime: c.startTime + pushAmount });
+            });
+        }
+      }
+
+      updateChord(selectedChordId, { duration });
+      setCursorPosition(chord.startTime + duration);
     }
   };
 
@@ -233,6 +345,27 @@ export function NoteButtons() {
           ))}
         </ButtonsRow>
       </NotesSection>
+      <ChordSection>
+        <Header>
+          <Title>Chords in {song.key}</Title>
+        </Header>
+        <ChordButtonsRow>
+          {chords.map((roman) => {
+            const chordInfo = getChordInfo(roman, song.key);
+            const qualitySuffix = chordInfo.quality === 'minor' ? 'm' : chordInfo.quality === 'diminished' ? '°' : '';
+            return (
+              <ChordButton
+                key={roman}
+                $color={chordInfo.color}
+                onClick={() => handleChordClick(roman)}
+              >
+                <ChordRoman>{roman}</ChordRoman>
+                <ChordName>{chordInfo.name}{qualitySuffix}</ChordName>
+              </ChordButton>
+            );
+          })}
+        </ChordButtonsRow>
+      </ChordSection>
       <DurationSection>
         <Title>Duration</Title>
         <DurationButtonsRow>

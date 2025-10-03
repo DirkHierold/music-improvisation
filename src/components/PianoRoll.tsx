@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 import { useStore } from '../store';
-import { MAJOR_SCALES, CHROMATIC_NOTES, NOTE_COLORS, NoteDuration } from '../types';
+import { MAJOR_SCALES, CHROMATIC_NOTES, NOTE_COLORS, NoteDuration, getChordInfo } from '../types';
 import { audioEngine } from '../services/AudioEngine';
 
 const Container = styled.div`
@@ -123,13 +123,77 @@ const PlaybackCursor = styled.div.attrs<{ $position: number }>(props => ({
   z-index: 10;
 `;
 
+const ChordRow = styled.div`
+  display: flex;
+  height: 50px;
+  position: relative;
+  border-top: 2px solid #555;
+`;
+
+const ChordLabel = styled.div`
+  width: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #333;
+  border-right: 1px solid #3c3c3c;
+  border-bottom: 1px solid #3c3c3c;
+  font-size: 12px;
+  color: #888;
+  font-weight: bold;
+`;
+
+const ChordTimeline = styled.div`
+  position: relative;
+  display: flex;
+  border-bottom: 1px solid #3c3c3c;
+`;
+
+const ChordBlock = styled.div<{ $selected: boolean; $isPlaying: boolean; $color: string }>`
+  position: absolute;
+  height: 40px;
+  top: 5px;
+  background-color: ${props => props.$color};
+  border: 2px solid ${props => props.$selected ? '#fff' : 'transparent'};
+  border-radius: 3px;
+  cursor: move;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 14px;
+  font-weight: bold;
+  user-select: none;
+  box-sizing: border-box;
+  opacity: ${props => props.$isPlaying ? 1 : 0.8};
+  box-shadow: ${props => props.$isPlaying ? '0 0 10px rgba(255, 255, 255, 0.8)' : 'none'};
+  transform: ${props => props.$isPlaying ? 'scale(1.05)' : 'scale(1)'};
+  transition: opacity 0.1s, box-shadow 0.1s, transform 0.1s;
+
+  &:hover {
+    opacity: 0.9;
+  }
+`;
+
+const ChordRomanLabel = styled.div`
+  font-size: 12px;
+`;
+
+const ChordNameLabel = styled.div`
+  font-size: 9px;
+  opacity: 0.8;
+`;
+
 export function PianoRoll() {
-  const { song, isChromatic, selectedDuration, currentBeat, cursorPosition, isPlaying, addNote, updateNote, deleteNote, selectedNoteId, setSelectedNoteId, setSelectedDuration, setCursorPosition } = useStore();
+  const { song, isChromatic, selectedDuration, currentBeat, cursorPosition, isPlaying, addNote, updateNote, deleteNote, selectedNoteId, setSelectedNoteId, setSelectedDuration, setCursorPosition, selectedChordId, setSelectedChordId, updateChord, deleteChord } = useStore();
 
   // Extract key explicitly for better React dependency tracking
   const currentKey = song.key;
   const [draggedNote, setDraggedNote] = useState<string | null>(null);
   const [resizingNote, setResizingNote] = useState<string | null>(null);
+  const [draggedChord, setDraggedChord] = useState<string | null>(null);
+  const [resizingChord, setResizingChord] = useState<string | null>(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0, startTime: 0, pitch: '' });
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -256,10 +320,70 @@ export function PianoRoll() {
   const maxNoteEnd = song.notes.reduce((max, note) =>
     Math.max(max, note.startTime + note.duration), beatsPerRow
   );
-  const totalRows = Math.ceil(maxNoteEnd / beatsPerRow);
+  const maxChordEnd = song.chords.reduce((max, chord) =>
+    Math.max(max, chord.startTime + chord.duration), beatsPerRow
+  );
+  const maxEnd = Math.max(maxNoteEnd, maxChordEnd);
+  const totalRows = Math.ceil(maxEnd / beatsPerRow);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (selectedNoteId) {
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          e.preventDefault();
+          deleteNote(selectedNoteId);
+          return;
+        }
+      }
+
+      if (selectedChordId) {
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          e.preventDefault();
+          deleteChord(selectedChordId);
+          return;
+        } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          const chord = song.chords.find(c => c.id === selectedChordId);
+          if (!chord) return;
+
+          const romanNumerals: ('I' | 'II' | 'III' | 'IV' | 'V' | 'VI' | 'VII')[] = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
+          const currentIndex = romanNumerals.indexOf(chord.roman);
+
+          let newRoman: 'I' | 'II' | 'III' | 'IV' | 'V' | 'VI' | 'VII';
+          if (e.key === 'ArrowUp') {
+            // Can't go higher than VII
+            if (currentIndex >= romanNumerals.length - 1) return;
+            newRoman = romanNumerals[currentIndex + 1];
+          } else {
+            // Can't go lower than I
+            if (currentIndex <= 0) return;
+            newRoman = romanNumerals[currentIndex - 1];
+          }
+
+          updateChord(selectedChordId, { roman: newRoman });
+          audioEngine.playChord(newRoman, song.key, chord.duration);
+          return;
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          e.preventDefault();
+          const chord = song.chords.find(c => c.id === selectedChordId);
+          if (!chord) return;
+
+          const timeDelta = e.key === 'ArrowLeft' ? -0.25 : 0.25;
+          const newStartTime = Math.max(0, chord.startTime + timeDelta);
+
+          if (newStartTime !== chord.startTime) {
+            const chordsToUpdate = song.chords.filter(c => c.startTime > chord.startTime);
+            chordsToUpdate.forEach(c => {
+              updateChord(c.id, { startTime: c.startTime + timeDelta });
+            });
+
+            updateChord(selectedChordId, { startTime: newStartTime });
+            setCursorPosition(newStartTime + chord.duration);
+          }
+          return;
+        }
+      }
+
       if (!selectedNoteId) return;
 
       if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -318,11 +442,51 @@ export function PianoRoll() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedNoteId, deleteNote, setSelectedNoteId, song.notes, reversedNotes, updateNote]);
+  }, [selectedNoteId, selectedChordId, deleteNote, deleteChord, setSelectedNoteId, song.notes, song.chords, reversedNotes, updateNote, updateChord]);
 
   const handleBeatLineClick = (e: React.MouseEvent, beat: number) => {
     e.stopPropagation();
     setCursorPosition(beat);
+
+    // Find the last note or chord before this beat position
+    const notesBefore = song.notes
+      .filter(n => n.startTime < beat)
+      .sort((a, b) => b.startTime - a.startTime);
+
+    const chordsBefore = song.chords
+      .filter(c => c.startTime < beat)
+      .sort((a, b) => b.startTime - a.startTime);
+
+    // Determine which is closer to the beat position
+    const lastNote = notesBefore[0];
+    const lastChord = chordsBefore[0];
+
+    if (lastNote && lastChord) {
+      // Both exist, select the one that's closer (most recent)
+      if (lastNote.startTime > lastChord.startTime) {
+        setSelectedNoteId(lastNote.id);
+        setSelectedChordId(null);
+        setSelectedDuration(lastNote.duration as NoteDuration);
+      } else {
+        setSelectedChordId(lastChord.id);
+        setSelectedNoteId(null);
+        setSelectedDuration(lastChord.duration as NoteDuration);
+      }
+    } else if (lastNote) {
+      // Only note exists
+      setSelectedNoteId(lastNote.id);
+      setSelectedChordId(null);
+      setSelectedDuration(lastNote.duration as NoteDuration);
+    } else if (lastChord) {
+      // Only chord exists
+      setSelectedChordId(lastChord.id);
+      setSelectedNoteId(null);
+      setSelectedDuration(lastChord.duration as NoteDuration);
+    } else {
+      // Nothing before this position
+      setSelectedNoteId(null);
+      setSelectedChordId(null);
+    }
   };
 
   const handleCellClick = async (pitch: string, beat: number) => {
@@ -364,6 +528,7 @@ export function PianoRoll() {
     if (!note) return;
 
     setSelectedNoteId(noteId);
+    setSelectedChordId(null); // Deselect any selected chord
     setSelectedDuration(note.duration as NoteDuration);
     setDraggedNote(noteId);
     setDragStart({ x: e.clientX, y: e.clientY, startTime: note.startTime, pitch: note.pitch });
@@ -375,8 +540,77 @@ export function PianoRoll() {
     setDragStart({ x: e.clientX, y: 0, startTime: 0, pitch: '' });
   };
 
+  const handleChordMouseDown = (e: React.MouseEvent, chordId: string) => {
+    e.stopPropagation();
+    const chord = song.chords.find(c => c.id === chordId);
+    if (!chord) return;
+
+    setSelectedChordId(chordId);
+    setSelectedNoteId(null); // Deselect any selected note
+    setSelectedDuration(chord.duration as NoteDuration);
+    setDraggedChord(chordId);
+    setDragStart({ x: e.clientX, y: e.clientY, startTime: chord.startTime, pitch: '' });
+  };
+
+  const handleChordResizeMouseDown = (e: React.MouseEvent, chordId: string) => {
+    e.stopPropagation();
+    setResizingChord(chordId);
+    setDragStart({ x: e.clientX, y: 0, startTime: 0, pitch: '' });
+  };
+
   const handleMouseMove = (e: MouseEvent) => {
-    if (draggedNote) {
+    if (draggedChord) {
+      const deltaX = e.clientX - dragStart.x;
+      const beatWidth = 60;
+      const beatDelta = Math.round(deltaX / beatWidth);
+
+      const chord = song.chords.find(c => c.id === draggedChord);
+      if (!chord) return;
+
+      const newStartTime = Math.max(0, dragStart.startTime + beatDelta);
+
+      if (newStartTime !== chord.startTime) {
+        const timeDelta = newStartTime - dragStart.startTime;
+
+        const chordsToUpdate = song.chords.filter(c => c.startTime > dragStart.startTime);
+        chordsToUpdate.forEach(c => {
+          updateChord(c.id, { startTime: c.startTime + timeDelta });
+        });
+
+        updateChord(draggedChord, { startTime: newStartTime });
+      }
+    } else if (resizingChord) {
+      const deltaX = e.clientX - dragStart.x;
+      const beatWidth = 60;
+      const beatDelta = Math.round(deltaX / beatWidth);
+
+      const chord = song.chords.find(c => c.id === resizingChord);
+      if (!chord) return;
+
+      const newDuration = Math.max(0.25, chord.duration + beatDelta * 0.25);
+      if (newDuration !== chord.duration) {
+        const newEndTime = chord.startTime + newDuration;
+        const oldEndTime = chord.startTime + chord.duration;
+
+        if (newEndTime > oldEndTime) {
+          const overlappingChords = song.chords.filter(
+            c => c.id !== resizingChord && c.startTime >= oldEndTime && c.startTime < newEndTime
+          );
+
+          if (overlappingChords.length > 0) {
+            const pushAmount = newEndTime - overlappingChords[0].startTime;
+            song.chords
+              .filter(c => c.startTime >= overlappingChords[0].startTime)
+              .forEach(c => {
+                updateChord(c.id, { startTime: c.startTime + pushAmount });
+              });
+          }
+        }
+
+        updateChord(resizingChord, { duration: newDuration });
+        setDragStart({ ...dragStart, x: e.clientX });
+      }
+    } else if (draggedNote) {
       const deltaX = e.clientX - dragStart.x;
       const deltaY = e.clientY - dragStart.y;
       const beatWidth = 60;
@@ -439,7 +673,17 @@ export function PianoRoll() {
   };
 
   const handleMouseUp = () => {
-    if (draggedNote) {
+    if (draggedChord) {
+      const chord = song.chords.find(c => c.id === draggedChord);
+      if (chord) {
+        setCursorPosition(chord.startTime + chord.duration);
+      }
+    } else if (resizingChord) {
+      const chord = song.chords.find(c => c.id === resizingChord);
+      if (chord) {
+        setCursorPosition(chord.startTime + chord.duration);
+      }
+    } else if (draggedNote) {
       const note = song.notes.find(n => n.id === draggedNote);
       if (note) {
         setCursorPosition(note.startTime + note.duration);
@@ -452,10 +696,12 @@ export function PianoRoll() {
     }
     setDraggedNote(null);
     setResizingNote(null);
+    setDraggedChord(null);
+    setResizingChord(null);
   };
 
   useEffect(() => {
-    if (draggedNote || resizingNote) {
+    if (draggedNote || resizingNote || draggedChord || resizingChord) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
       return () => {
@@ -463,7 +709,7 @@ export function PianoRoll() {
         window.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [draggedNote, resizingNote, dragStart, song.notes]);
+  }, [draggedNote, resizingNote, draggedChord, resizingChord, dragStart, song.notes, song.chords]);
 
   const displayPosition = isPlaying ? currentBeat : cursorPosition;
 
@@ -539,6 +785,69 @@ export function PianoRoll() {
                 </Timeline>
               </Row>
             ))}
+            <ChordRow>
+              <ChordLabel>Chords</ChordLabel>
+              <ChordTimeline>
+                {Array.from({ length: beatsPerRow }).map((_, beatIndex) => {
+                  const absoluteBeat = rowStartBeat + beatIndex;
+                  return (
+                    <Beat
+                      key={beatIndex}
+                      $isMeasureStart={absoluteBeat % song.meter.beatsPerMeasure === 0}
+                    >
+                      <BeatClickArea onClick={(e) => handleBeatLineClick(e, absoluteBeat)} />
+                    </Beat>
+                  );
+                })}
+                <EndBar />
+                {song.chords
+                  .filter(chord =>
+                    (chord.startTime >= rowStartBeat && chord.startTime < rowEndBeat) ||
+                    (chord.startTime < rowStartBeat && chord.startTime + chord.duration > rowStartBeat)
+                  )
+                  .map(chord => {
+                    const isChordCurrentlyPlaying = isPlaying &&
+                      currentBeat >= chord.startTime &&
+                      currentBeat < chord.startTime + chord.duration;
+
+                    const chordStart = chord.startTime;
+                    const chordEnd = chord.startTime + chord.duration;
+
+                    const visibleStart = Math.max(chordStart, rowStartBeat);
+                    const visibleEnd = Math.min(chordEnd, rowEndBeat);
+
+                    const relativeStart = visibleStart - rowStartBeat;
+                    const visibleDuration = visibleEnd - visibleStart;
+
+                    const isContinuation = chordStart < rowStartBeat;
+
+                    const chordInfo = getChordInfo(chord.roman, song.key);
+                    const qualitySuffix = chordInfo.quality === 'minor' ? 'm' : chordInfo.quality === 'diminished' ? '°' : '';
+
+                    return (
+                      <ChordBlock
+                        key={`${chord.id}-${rowIndex}`}
+                        $selected={selectedChordId === chord.id}
+                        $isPlaying={isChordCurrentlyPlaying}
+                        $color={chordInfo.color}
+                        style={{
+                          left: `${relativeStart * 60 + 1}px`,
+                          width: `${visibleDuration * 60 - 2}px`,
+                        }}
+                        onMouseDown={(e) => handleChordMouseDown(e, chord.id)}
+                      >
+                        {!isContinuation && (
+                          <>
+                            <ChordRomanLabel>{chord.roman}</ChordRomanLabel>
+                            <ChordNameLabel>{chordInfo.name}{qualitySuffix}</ChordNameLabel>
+                          </>
+                        )}
+                        {!isContinuation && <ResizeHandle onMouseDown={(e) => handleChordResizeMouseDown(e, chord.id)} />}
+                      </ChordBlock>
+                    );
+                  })}
+              </ChordTimeline>
+            </ChordRow>
           </Grid>
         );
       })}

@@ -1,10 +1,10 @@
-import { Song, Note } from '../types';
+import { Song, Note, Chord, MAJOR_SCALES } from '../types';
 
 /**
  * Converts a Song object to MusicXML format
  */
 export function songToMusicXML(song: Song): string {
-  const { tempo, meter, key, notes } = song;
+  const { tempo, meter, key, notes, chords } = song;
 
   // Extract key information (assuming format "C Major")
   const keyNote = key.split(' ')[0];
@@ -52,7 +52,7 @@ export function songToMusicXML(song: Song): string {
         </clef>
       </attributes>
       <sound tempo="${tempo}"/>
-${generateNotesXML(sortedNotes, divisions, meter.beatsPerMeasure)}
+${generateNotesAndChordsXML(sortedNotes, chords, divisions, meter.beatsPerMeasure, key)}
     </measure>
   </part>
 </score-partwise>`;
@@ -139,11 +139,59 @@ export function musicXMLToSong(xmlString: string): Song {
     }
   });
 
+  // Extract chords from harmony elements
+  const harmonyElements = xmlDoc.querySelectorAll('harmony');
+  const chords: Chord[] = [];
+
+  let chordTime = 0;
+  harmonyElements.forEach((harmonyElement) => {
+    const rootElement = harmonyElement.querySelector('root root-step');
+    const kindElement = harmonyElement.querySelector('kind');
+    const offsetElement = harmonyElement.querySelector('offset');
+
+    if (rootElement && kindElement) {
+      const rootStep = rootElement.textContent || '';
+
+      // Map root step to Roman numeral based on key
+      const scaleNotes = MAJOR_SCALES[key] || MAJOR_SCALES['C Major'];
+
+      // Find which scale degree this root corresponds to
+      let degree = -1;
+      for (let i = 0; i < scaleNotes.length; i++) {
+        if (scaleNotes[i].charAt(0) === rootStep) {
+          degree = i;
+          break;
+        }
+      }
+
+      const degreeToRoman: Record<number, 'I' | 'II' | 'III' | 'IV' | 'V' | 'VI' | 'VII'> = {
+        0: 'I', 1: 'II', 2: 'III', 3: 'IV', 4: 'V', 5: 'VI', 6: 'VII'
+      };
+
+      const roman = degreeToRoman[degree];
+
+      if (roman) {
+        const offset = offsetElement ? parseInt(offsetElement.textContent || '0') / divisions : 0;
+
+        chords.push({
+          id: crypto.randomUUID(),
+          roman,
+          startTime: chordTime + offset,
+          duration: 1 // Default duration, will be updated if we find duration info
+        });
+      }
+    }
+
+    // Advance chord time (simplified)
+    chordTime += 1;
+  });
+
   return {
     tempo,
     meter: { beatsPerMeasure, beatUnit },
     key,
-    notes
+    notes,
+    chords
   };
 }
 
@@ -194,6 +242,50 @@ export function loadMusicXMLFile(file: File): Promise<Song> {
 }
 
 // Helper functions
+
+function generateNotesAndChordsXML(notes: Note[], chords: Chord[], divisions: number, beatsPerMeasure: number, key: string): string {
+  const notesXML = generateNotesXML(notes, divisions, beatsPerMeasure);
+  const chordsXML = generateChordsXML(chords, divisions, key);
+
+  // Interleave chords with notes based on timing
+  // For simplicity, we'll add all chords first, then notes
+  return chordsXML + (chordsXML && notesXML ? '\n' : '') + notesXML;
+}
+
+function generateChordsXML(chords: Chord[], divisions: number, key: string): string {
+  if (chords.length === 0) return '';
+
+  const scaleNotes = MAJOR_SCALES[key] || MAJOR_SCALES['C Major'];
+
+  const sortedChords = [...chords].sort((a, b) => a.startTime - b.startTime);
+
+  return sortedChords.map(chord => {
+    const romanToIndex: Record<string, number> = {
+      'I': 0, 'II': 1, 'III': 2, 'IV': 3, 'V': 4, 'VI': 5, 'VII': 6
+    };
+
+    const degree = romanToIndex[chord.roman];
+    const rootStep = scaleNotes[degree];
+
+    // Determine chord quality
+    let kind = 'major';
+    if (chord.roman === 'II' || chord.roman === 'III' || chord.roman === 'VI') {
+      kind = 'minor';
+    } else if (chord.roman === 'VII') {
+      kind = 'diminished';
+    }
+
+    const offset = Math.round(chord.startTime * divisions);
+
+    return `      <harmony>
+        <root>
+          <root-step>${rootStep.charAt(0)}</root-step>${rootStep.includes('#') ? '\n          <root-alter>1</root-alter>' : ''}${rootStep.includes('b') ? '\n          <root-alter>-1</root-alter>' : ''}
+        </root>
+        <kind>${kind}</kind>
+        <offset>${offset}</offset>
+      </harmony>`;
+  }).join('\n');
+}
 
 function generateNotesXML(notes: Note[], divisions: number, beatsPerMeasure: number): string {
   if (notes.length === 0) {

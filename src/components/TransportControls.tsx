@@ -50,9 +50,13 @@ export function TransportControls() {
       setIsPlaying(true);
 
       // Calculate the end position of the song
-      const songEndPosition = song.notes.length > 0
+      const noteEndPosition = song.notes.length > 0
         ? Math.max(...song.notes.map(note => note.startTime + note.duration))
         : 0;
+      const chordEndPosition = song.chords.length > 0
+        ? Math.max(...song.chords.map(chord => chord.startTime + chord.duration))
+        : 0;
+      const songEndPosition = Math.max(noteEndPosition, chordEndPosition);
 
       // Determine start position based on cursor location
       let startPosition = cursorPosition;
@@ -84,6 +88,8 @@ export function TransportControls() {
         // Normal editor mode with audio
         audioEngine.startPlayback(
           song.notes,
+          song.chords,
+          song.key,
           song.tempo,
           (beat) => setCurrentBeat(beat),
           (endPosition) => {
