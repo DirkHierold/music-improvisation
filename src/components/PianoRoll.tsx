@@ -42,7 +42,7 @@ const Timeline = styled.div`
   border-bottom: 1px solid #3c3c3c;
 `;
 
-const Beat = styled.div<{ $isMeasureStart: boolean; $chordColor?: string; $chordCoverage?: number }>`
+const Beat = styled.div<{ $isMeasureStart: boolean; $chordColor?: string; $chordStartOffset?: number; $chordCoverage?: number }>`
   width: 60px;
   border-left: 1px solid ${props => props.$isMeasureStart ? '#555' : 'transparent'};
   border-right: 1px solid #3a3a3a;
@@ -50,11 +50,15 @@ const Beat = styled.div<{ $isMeasureStart: boolean; $chordColor?: string; $chord
   position: relative;
   background: ${props => {
     if (!props.$chordColor) return 'transparent';
+    const startOffset = props.$chordStartOffset || 0;
     const coverage = props.$chordCoverage || 1;
-    if (coverage >= 1) return props.$chordColor;
-    // Create a gradient that shows color for the coverage portion, then transparent
-    const coveragePercent = coverage * 100;
-    return `linear-gradient(to right, ${props.$chordColor} 0%, ${props.$chordColor} ${coveragePercent}%, transparent ${coveragePercent}%)`;
+    const startPercent = startOffset * 100;
+    const endPercent = (startOffset + coverage) * 100;
+
+    if (startOffset === 0 && coverage >= 1) return props.$chordColor;
+
+    // Create a gradient: transparent until startOffset, then color for coverage, then transparent
+    return `linear-gradient(to right, transparent 0%, transparent ${startPercent}%, ${props.$chordColor} ${startPercent}%, ${props.$chordColor} ${endPercent}%, transparent ${endPercent}%)`;
   }};
 `;
 
@@ -335,11 +339,16 @@ export function PianoRoll() {
   const totalRows = Math.ceil(maxEnd / beatsPerRow);
 
   // Helper function to get the chord color for a specific beat and pitch
-  // Returns color and the portion of the beat that should be colored (0-1)
-  const getChordColorForBeat = (beat: number, pitch: string): { color: string; coverage: number } | undefined => {
-    // Find the chord active at this beat
+  // Returns color, start offset within the beat, and coverage length
+  const getChordColorForBeat = (beat: number, pitch: string): { color: string; startOffset: number; coverage: number } | undefined => {
+    // Find the chord active at this beat range (beat to beat+1)
+    const beatEndTime = beat + 1;
     const activeChord = song.chords.find(
-      chord => beat >= chord.startTime && beat < chord.startTime + chord.duration
+      chord => {
+        const chordEndTime = chord.startTime + chord.duration;
+        // Chord is active if it overlaps with this beat cell [beat, beat+1)
+        return chord.startTime < beatEndTime && chordEndTime > beat;
+      }
     );
 
     if (!activeChord) return undefined;
@@ -362,19 +371,22 @@ export function PianoRoll() {
     const baseColor = NOTE_COLORS[pitchName.replace('#', '')] || '#888';
 
     // Calculate how much of this beat cell should be colored
-    // If chord ends within this beat, only color a portion
-    const chordEndTime = activeChord.startTime + activeChord.duration;
-    const beatEndTime = beat + 1;
+    const chordStartTime = activeChord.startTime;
+    const chordEndTime = chordStartTime + activeChord.duration;
 
-    let coverage = 1; // Default: full beat
-    if (chordEndTime < beatEndTime) {
-      // Chord ends within this beat cell
-      coverage = chordEndTime - beat;
-    }
+    // Calculate the overlap between the chord and this beat cell
+    const overlapStart = Math.max(beat, chordStartTime);
+    const overlapEnd = Math.min(beatEndTime, chordEndTime);
+
+    // Start offset: where within the beat cell does the chord begin (0-1)
+    const startOffset = overlapStart - beat;
+    // Coverage: how much of the beat cell is covered (0-1)
+    const coverage = overlapEnd - overlapStart;
 
     // Convert to pastel by adding transparency
     return {
       color: baseColor + '20', // 20 is hex for ~12% opacity for a subtle pastel effect
+      startOffset,
       coverage
     };
   };
@@ -889,6 +901,7 @@ export function PianoRoll() {
                         key={beatIndex}
                         $isMeasureStart={absoluteBeat % song.meter.beatsPerMeasure === 0}
                         $chordColor={chordInfo?.color}
+                        $chordStartOffset={chordInfo?.startOffset}
                         $chordCoverage={chordInfo?.coverage}
                         onClick={() => handleCellClick(pitch, absoluteBeat)}
                       >

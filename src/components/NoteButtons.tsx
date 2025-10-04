@@ -118,13 +118,13 @@ const NoteButton = styled.button<{ $color: string }>`
   }
 `;
 
-const DurationButton = styled.button<{ $selected: boolean }>`
-  background-color: ${props => props.$selected ? '#5dade2' : '#3c3c3c'};
+const DurationButton = styled.button<{ $selected: boolean; $disabled?: boolean }>`
+  background-color: ${props => props.$disabled ? '#2a2a2a' : props.$selected ? '#5dade2' : '#3c3c3c'};
   border: none;
   border-radius: 5px;
-  color: white;
+  color: ${props => props.$disabled ? '#555' : 'white'};
   padding: 10px 15px;
-  cursor: pointer;
+  cursor: ${props => props.$disabled ? 'not-allowed' : 'pointer'};
   transition: opacity 0.2s, background-color 0.2s;
   font-size: 14px;
   font-weight: bold;
@@ -135,10 +135,11 @@ const DurationButton = styled.button<{ $selected: boolean }>`
   gap: 2px;
   min-width: 60px;
   min-height: 60px;
+  opacity: ${props => props.$disabled ? 0.5 : 1};
 
   &:hover {
-    opacity: 0.8;
-    background-color: ${props => props.$selected ? '#3498db' : '#4a4a4a'};
+    opacity: ${props => props.$disabled ? 0.5 : 0.8};
+    background-color: ${props => props.$disabled ? '#2a2a2a' : props.$selected ? '#3498db' : '#4a4a4a'};
   }
 `;
 
@@ -290,6 +291,57 @@ export function NoteButtons() {
     });
   };
 
+  // Calculate maximum available duration for the selected note or chord
+  const getMaxAvailableDuration = (): number | null => {
+    if (selectedNoteId) {
+      const note = song.notes.find(n => n.id === selectedNoteId);
+      if (!note) return null;
+
+      const nextNoteOnSameRow = song.notes
+        .filter(n => n.id !== selectedNoteId && n.pitch === note.pitch && n.startTime > note.startTime)
+        .sort((a, b) => a.startTime - b.startTime)[0];
+
+      return nextNoteOnSameRow
+        ? nextNoteOnSameRow.startTime - note.startTime
+        : null; // No limit if no next note
+    } else if (selectedChordId) {
+      const chord = song.chords.find(c => c.id === selectedChordId);
+      if (!chord) return null;
+
+      const nextChordOnSameRow = song.chords
+        .filter(c => c.id !== selectedChordId && c.startTime > chord.startTime)
+        .sort((a, b) => a.startTime - b.startTime)[0];
+
+      return nextChordOnSameRow
+        ? nextChordOnSameRow.startTime - chord.startTime
+        : null; // No limit if no next chord
+    }
+    return null;
+  };
+
+  // Function to check if adding a duration would exceed the limit
+  const isDurationDisabled = (duration: NoteDuration): boolean => {
+    const maxAvailableDuration = getMaxAvailableDuration();
+
+    // If no note or chord selected, or no limit, don't disable
+    if (maxAvailableDuration === null) {
+      // Still enforce max duration of 7.75 beats (sum of all available durations)
+      const MAX_DURATION = 7.75;
+      const totalDuration = selectedComponents.reduce((sum, d) => sum + d, 0);
+      if (selectedComponents.includes(duration)) return false;
+      return (totalDuration + duration) > MAX_DURATION;
+    }
+
+    // If already selected, never disable (user can deselect)
+    if (selectedComponents.includes(duration)) return false;
+
+    // Calculate what the total would be if we add this duration
+    const totalDuration = selectedComponents.reduce((sum, d) => sum + d, 0);
+    const potentialTotal = totalDuration + duration;
+
+    return potentialTotal > maxAvailableDuration;
+  };
+
   const handleDurationClick = (duration: NoteDuration) => {
     let newComponents: NoteDuration[];
 
@@ -323,50 +375,38 @@ export function NoteButtons() {
       const note = song.notes.find(n => n.id === selectedNoteId);
       if (!note) return;
 
-      const oldEndTime = note.startTime + note.duration;
-      const newEndTime = note.startTime + totalDuration;
+      // Find the next note on the same row (same pitch)
+      const nextNoteOnSameRow = song.notes
+        .filter(n => n.id !== selectedNoteId && n.pitch === note.pitch && n.startTime > note.startTime)
+        .sort((a, b) => a.startTime - b.startTime)[0];
 
-      if (newEndTime > oldEndTime) {
-        const overlappingNotes = song.notes.filter(
-          n => n.id !== selectedNoteId && n.pitch === note.pitch && n.startTime >= oldEndTime && n.startTime < newEndTime
-        );
+      // Limit duration to not exceed the next note's start time
+      const maxDuration = nextNoteOnSameRow
+        ? nextNoteOnSameRow.startTime - note.startTime
+        : totalDuration;
 
-        if (overlappingNotes.length > 0) {
-          const pushAmount = newEndTime - overlappingNotes[0].startTime;
-          song.notes
-            .filter(n => n.startTime >= overlappingNotes[0].startTime)
-            .forEach(n => {
-              updateNote(n.id, { startTime: n.startTime + pushAmount });
-            });
-        }
-      }
+      const finalDuration = Math.min(totalDuration, maxDuration);
 
-      updateNote(selectedNoteId, { duration: totalDuration, durationComponents: newComponents });
-      setCursorPosition(note.startTime + totalDuration);
+      updateNote(selectedNoteId, { duration: finalDuration, durationComponents: newComponents });
+      setCursorPosition(note.startTime + finalDuration);
     } else if (selectedChordId) {
       const chord = song.chords.find(c => c.id === selectedChordId);
       if (!chord) return;
 
-      const oldEndTime = chord.startTime + chord.duration;
-      const newEndTime = chord.startTime + totalDuration;
+      // Find the next chord on the same row (chord row)
+      const nextChordOnSameRow = song.chords
+        .filter(c => c.id !== selectedChordId && c.startTime > chord.startTime)
+        .sort((a, b) => a.startTime - b.startTime)[0];
 
-      if (newEndTime > oldEndTime) {
-        const overlappingChords = song.chords.filter(
-          c => c.id !== selectedChordId && c.startTime >= oldEndTime && c.startTime < newEndTime
-        );
+      // Limit duration to not exceed the next chord's start time
+      const maxDuration = nextChordOnSameRow
+        ? nextChordOnSameRow.startTime - chord.startTime
+        : totalDuration;
 
-        if (overlappingChords.length > 0) {
-          const pushAmount = newEndTime - overlappingChords[0].startTime;
-          song.chords
-            .filter(c => c.startTime >= overlappingChords[0].startTime)
-            .forEach(c => {
-              updateChord(c.id, { startTime: c.startTime + pushAmount });
-            });
-        }
-      }
+      const finalDuration = Math.min(totalDuration, maxDuration);
 
-      updateChord(selectedChordId, { duration: totalDuration, durationComponents: newComponents });
-      setCursorPosition(chord.startTime + totalDuration);
+      updateChord(selectedChordId, { duration: finalDuration, durationComponents: newComponents });
+      setCursorPosition(chord.startTime + finalDuration);
     }
   };
 
@@ -424,7 +464,8 @@ export function NoteButtons() {
             <DurationButton
               key={value}
               $selected={selectedComponents.includes(value)}
-              onClick={() => handleDurationClick(value)}
+              $disabled={isDurationDisabled(value)}
+              onClick={() => !isDurationDisabled(value) && handleDurationClick(value)}
             >
               {label}
             </DurationButton>

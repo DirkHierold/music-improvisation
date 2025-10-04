@@ -29,18 +29,19 @@ const TotalDisplay = styled.div`
   margin-bottom: 5px;
 `;
 
-const DurationButton = styled.button<{ $selected: boolean }>`
-  background-color: ${props => props.$selected ? '#5dade2' : '#3c3c3c'};
+const DurationButton = styled.button<{ $selected: boolean; $disabled?: boolean }>`
+  background-color: ${props => props.$disabled ? '#2a2a2a' : props.$selected ? '#5dade2' : '#3c3c3c'};
   border: 1px solid #555;
   border-radius: 3px;
-  color: #d3d3d3;
+  color: ${props => props.$disabled ? '#555' : '#d3d3d3'};
   padding: 8px 12px;
-  cursor: pointer;
+  cursor: ${props => props.$disabled ? 'not-allowed' : 'pointer'};
   transition: background-color 0.2s;
   font-size: 14px;
+  opacity: ${props => props.$disabled ? 0.5 : 1};
 
   &:hover {
-    background-color: ${props => props.$selected ? '#3498db' : '#4a4a4a'};
+    background-color: ${props => props.$disabled ? '#2a2a2a' : props.$selected ? '#3498db' : '#4a4a4a'};
   }
 `;
 
@@ -55,6 +56,22 @@ const durations: { value: NoteDuration; label: string }[] = [
 export function DurationPanel() {
   const { setSelectedDuration, selectedNoteId, updateNote, song, setCursorPosition } = useStore();
   const [selectedComponents, setSelectedComponents] = useState<NoteDuration[]>([1]); // Start with 1 beat selected
+
+  // Calculate maximum available duration for the selected note
+  const getMaxAvailableDuration = (): number | null => {
+    if (!selectedNoteId) return null;
+
+    const note = song.notes.find(n => n.id === selectedNoteId);
+    if (!note) return null;
+
+    const nextNoteOnSameRow = song.notes
+      .filter(n => n.id !== selectedNoteId && n.pitch === note.pitch && n.startTime > note.startTime)
+      .sort((a, b) => a.startTime - b.startTime)[0];
+
+    return nextNoteOnSameRow
+      ? nextNoteOnSameRow.startTime - note.startTime
+      : null; // No limit if no next note
+  };
 
   const handleDurationClick = (duration: NoteDuration) => {
     let newComponents: NoteDuration[];
@@ -84,30 +101,38 @@ export function DurationPanel() {
       const note = song.notes.find(n => n.id === selectedNoteId);
       if (!note) return;
 
-      const oldEndTime = note.startTime + note.duration;
-      const newEndTime = note.startTime + totalDuration;
+      // Find the next note on the same row (same pitch)
+      const nextNoteOnSameRow = song.notes
+        .filter(n => n.id !== selectedNoteId && n.pitch === note.pitch && n.startTime > note.startTime)
+        .sort((a, b) => a.startTime - b.startTime)[0];
 
-      if (newEndTime > oldEndTime) {
-        const overlappingNotes = song.notes.filter(
-          n => n.id !== selectedNoteId && n.pitch === note.pitch && n.startTime >= oldEndTime && n.startTime < newEndTime
-        );
+      // Limit duration to not exceed the next note's start time
+      const maxDuration = nextNoteOnSameRow
+        ? nextNoteOnSameRow.startTime - note.startTime
+        : totalDuration;
 
-        if (overlappingNotes.length > 0) {
-          const pushAmount = newEndTime - overlappingNotes[0].startTime;
-          song.notes
-            .filter(n => n.startTime >= overlappingNotes[0].startTime)
-            .forEach(n => {
-              updateNote(n.id, { startTime: n.startTime + pushAmount });
-            });
-        }
-      }
+      const finalDuration = Math.min(totalDuration, maxDuration) as NoteDuration;
 
-      updateNote(selectedNoteId, { duration: totalDuration as NoteDuration });
-      setCursorPosition(note.startTime + totalDuration);
+      updateNote(selectedNoteId, { duration: finalDuration });
+      setCursorPosition(note.startTime + finalDuration);
     }
   };
 
   const totalDuration = selectedComponents.reduce((sum, d) => sum + d, 0);
+  const maxAvailableDuration = getMaxAvailableDuration();
+
+  // Function to check if adding a duration would exceed the limit
+  const isDurationDisabled = (duration: NoteDuration): boolean => {
+    if (maxAvailableDuration === null) return false; // No limit
+
+    // If already selected, never disable (user can deselect)
+    if (selectedComponents.includes(duration)) return false;
+
+    // Calculate what the total would be if we add this duration
+    const potentialTotal = totalDuration + duration;
+
+    return potentialTotal > maxAvailableDuration;
+  };
 
   return (
     <Container>
@@ -117,7 +142,8 @@ export function DurationPanel() {
         <DurationButton
           key={value}
           $selected={selectedComponents.includes(value)}
-          onClick={() => handleDurationClick(value)}
+          $disabled={isDurationDisabled(value)}
+          onClick={() => !isDurationDisabled(value) && handleDurationClick(value)}
         >
           {label}
         </DurationButton>
