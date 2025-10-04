@@ -1337,8 +1337,8 @@ export function PianoRoll() {
                       }
                     }
 
-                    // Position the markers at the center of the chord duration
-                    const markerX = relativeStart * 60 + (visibleDuration * 60) / 2 - 15;
+                    // Position the markers at the start of the chord (left edge)
+                    const markerX = relativeStart * 60 - 15;
 
                     return chordPositions.map((pos, idx) => {
                       const color = NOTE_COLORS[pos.note.replace('#', '').replace('b', '')] || chordInfo.color;
@@ -1389,8 +1389,8 @@ export function PianoRoll() {
 
                     const isContinuation = noteStart < rowStartBeat;
 
-                    // Position the marker at the center of the note duration
-                    const markerX = relativeStart * 60 + (visibleDuration * 60) / 2 - 15;
+                    // Position the marker at the start of the note (left edge)
+                    const markerX = relativeStart * 60 - 15;
                     const markerY = STRING_POSITIONS[position.string] - 15;
 
                     return (
