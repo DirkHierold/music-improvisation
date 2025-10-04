@@ -114,7 +114,7 @@ class AudioEngine {
     });
   }
 
-  async playNote(pitch: string, duration: number = 1) {
+  playNote(pitch: string, duration: number = 1) {
     if (!this.sampler) {
       return;
     }
@@ -123,7 +123,10 @@ class AudioEngine {
       return;
     }
 
-    await Tone.start();
+    // Only start Tone.js context if needed (non-blocking)
+    if (Tone.context.state !== 'running') {
+      Tone.start();
+    }
 
     try {
       this.sampler.triggerAttackRelease(pitch, duration);
@@ -142,7 +145,7 @@ class AudioEngine {
     }
   }
 
-  async playChord(roman: 'I' | 'II' | 'III' | 'IV' | 'V' | 'VI' | 'VII', key: string, duration: number = 1) {
+  playChord(roman: 'I' | 'II' | 'III' | 'IV' | 'V' | 'VI' | 'VII', key: string, duration: number = 1) {
     if (!this.sampler) {
       return;
     }
@@ -151,7 +154,10 @@ class AudioEngine {
       return;
     }
 
-    await Tone.start();
+    // Only start Tone.js context if needed (non-blocking)
+    if (Tone.context.state !== 'running') {
+      Tone.start();
+    }
 
     const chordNotes = this.getChordNotes(roman, key);
 

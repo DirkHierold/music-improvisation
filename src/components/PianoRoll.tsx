@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 import { useStore } from '../store';
-import { MAJOR_SCALES, CHROMATIC_NOTES, NOTE_COLORS, NoteDuration, getChordInfo } from '../types';
+import { MAJOR_SCALES, CHROMATIC_NOTES, NOTE_COLORS, NoteDuration, getChordInfo, getChordNotes } from '../types';
 import { audioEngine } from '../services/AudioEngine';
 
 const Container = styled.div`
@@ -42,12 +42,13 @@ const Timeline = styled.div`
   border-bottom: 1px solid #3c3c3c;
 `;
 
-const Beat = styled.div<{ $isMeasureStart: boolean }>`
+const Beat = styled.div<{ $isMeasureStart: boolean; $chordColor?: string }>`
   width: 60px;
   border-left: 1px solid ${props => props.$isMeasureStart ? '#555' : 'transparent'};
   border-right: 1px solid #3a3a3a;
   flex-shrink: 0;
   position: relative;
+  background-color: ${props => props.$chordColor || 'transparent'};
 `;
 
 const BeatClickArea = styled.div`
@@ -326,6 +327,36 @@ export function PianoRoll() {
   const maxEnd = Math.max(maxNoteEnd, maxChordEnd);
   const totalRows = Math.ceil(maxEnd / beatsPerRow);
 
+  // Helper function to get the chord color for a specific beat and pitch
+  const getChordColorForBeat = (beat: number, pitch: string): string | undefined => {
+    // Find the chord active at this beat
+    const activeChord = song.chords.find(
+      chord => beat >= chord.startTime && beat < chord.startTime + chord.duration
+    );
+
+    if (!activeChord) return undefined;
+
+    // Get the notes in this chord
+    const chordNotes = getChordNotes(activeChord.roman, song.key);
+
+    // Extract the note name without octave
+    const pitchName = pitch.replace(/\d+/, '').replace(/b/g, '#');
+
+    // Check if this pitch is in the chord
+    const isInChord = chordNotes.some(chordNote => {
+      const normalizedChordNote = chordNote.replace(/b/g, '#');
+      return normalizedChordNote === pitchName;
+    });
+
+    if (!isInChord) return undefined;
+
+    // Get the base color for this note
+    const baseColor = NOTE_COLORS[pitchName.replace('#', '')] || '#888';
+
+    // Convert to pastel by adding transparency
+    return baseColor + '20'; // 20 is hex for ~12% opacity for a subtle pastel effect
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (selectedNoteId) {
@@ -531,13 +562,14 @@ export function PianoRoll() {
     }
   };
 
-  const handleCellClick = async (pitch: string, beat: number) => {
+  const handleCellClick = (pitch: string, beat: number) => {
     const existingNote = song.notes.find(
       n => n.pitch === pitch && beat >= n.startTime && beat < n.startTime + n.duration
     );
 
     if (!existingNote) {
-      await audioEngine.initialize();
+      // Initialize audio engine if needed (non-blocking)
+      audioEngine.initialize();
       audioEngine.playNote(pitch, selectedDuration);
 
       const newNoteEndTime = beat + selectedDuration;
@@ -772,10 +804,12 @@ export function PianoRoll() {
                 <Timeline>
                   {Array.from({ length: beatsPerRow }).map((_, beatIndex) => {
                     const absoluteBeat = rowStartBeat + beatIndex;
+                    const chordColor = getChordColorForBeat(absoluteBeat, pitch);
                     return (
                       <Beat
                         key={beatIndex}
                         $isMeasureStart={absoluteBeat % song.meter.beatsPerMeasure === 0}
+                        $chordColor={chordColor}
                         onClick={() => handleCellClick(pitch, absoluteBeat)}
                       >
                         <BeatClickArea onClick={(e) => handleBeatLineClick(e, absoluteBeat)} />

@@ -229,7 +229,7 @@ export function UkuleleRoll() {
           await audioEngine.initialize();
 
           const durationInSeconds = (note.duration * 60) / song.tempo;
-          await audioEngine.playNote(note.pitch, durationInSeconds);
+          audioEngine.playNote(note.pitch, durationInSeconds);
         } catch (error) {
           // Audio error - continue silently
         }

@@ -88,3 +88,20 @@ export function getChordInfo(roman: 'I' | 'II' | 'III' | 'IV' | 'V' | 'VI' | 'VI
     color: noteColor
   };
 }
+
+/**
+ * Get the notes that make up a chord (triad)
+ */
+export function getChordNotes(roman: 'I' | 'II' | 'III' | 'IV' | 'V' | 'VI' | 'VII', key: string): string[] {
+  const scaleNotes = MAJOR_SCALES[key] || MAJOR_SCALES['C Major'];
+  const romanToIndex: Record<string, number> = {
+    'I': 0, 'II': 1, 'III': 2, 'IV': 3, 'V': 4, 'VI': 5, 'VII': 6
+  };
+
+  const degree = romanToIndex[roman];
+  const rootNote = scaleNotes[degree];
+  const thirdNote = scaleNotes[(degree + 2) % 7];
+  const fifthNote = scaleNotes[(degree + 4) % 7];
+
+  return [rootNote, thirdNote, fifthNote];
+}
