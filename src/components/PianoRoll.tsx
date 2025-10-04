@@ -425,13 +425,19 @@ export function PianoRoll() {
           const newStartTime = Math.max(0, chord.startTime + timeDelta);
 
           if (newStartTime !== chord.startTime) {
-            const chordsToUpdate = song.chords.filter(c => c.startTime > chord.startTime);
-            chordsToUpdate.forEach(c => {
-              updateChord(c.id, { startTime: c.startTime + timeDelta });
+            // Check for collisions with other chords
+            const wouldCollide = song.chords.some(c => {
+              if (c.id === selectedChordId) return false;
+              const newEndTime = newStartTime + chord.duration;
+              const existingEndTime = c.startTime + c.duration;
+              return (newStartTime < existingEndTime && newEndTime > c.startTime);
             });
 
-            updateChord(selectedChordId, { startTime: newStartTime });
-            setCursorPosition(newStartTime + chord.duration);
+            if (!wouldCollide) {
+              updateChord(selectedChordId, { startTime: newStartTime });
+              setCursorPosition(newStartTime + chord.duration);
+              audioEngine.playChord(chord.roman, song.key, chord.duration);
+            }
           }
           return;
         }
@@ -456,65 +462,84 @@ export function PianoRoll() {
         const octave = parseInt(note.pitch.match(/\d+/)?.[0] || '4');
         const noteIndex = pitchOrder.indexOf(noteName);
 
-        let newPitch: string;
-        if (e.key === 'ArrowUp') {
-          if (noteIndex === pitchOrder.length - 1) {
-            // When wrapping to the next octave, need to check chromatic position
-            const currentChromaticIndex = allPitchOrder.indexOf(noteName);
-            const nextScaleNote = pitchOrder[0];
-            const nextChromaticIndex = allPitchOrder.indexOf(nextScaleNote);
-
-            // If next scale note comes after current note chromatically, stay in same octave
-            // Otherwise, move to next octave
-            if (nextChromaticIndex > currentChromaticIndex) {
-              newPitch = pitchOrder[0] + octave;
+        // Helper function to get the next pitch in the given direction
+        const getNextPitch = (currentIndex: number, currentOctave: number, direction: 'up' | 'down'): string => {
+          if (direction === 'up') {
+            if (currentIndex === pitchOrder.length - 1) {
+              const currentChromaticIndex = allPitchOrder.indexOf(pitchOrder[currentIndex]);
+              const nextScaleNote = pitchOrder[0];
+              const nextChromaticIndex = allPitchOrder.indexOf(nextScaleNote);
+              if (nextChromaticIndex > currentChromaticIndex) {
+                return pitchOrder[0] + currentOctave;
+              } else {
+                return pitchOrder[0] + (currentOctave + 1);
+              }
             } else {
-              newPitch = pitchOrder[0] + (octave + 1);
+              const currentChromaticIndex = allPitchOrder.indexOf(pitchOrder[currentIndex]);
+              const nextScaleNote = pitchOrder[currentIndex + 1];
+              const nextChromaticIndex = allPitchOrder.indexOf(nextScaleNote);
+              if (nextChromaticIndex > currentChromaticIndex) {
+                return pitchOrder[currentIndex + 1] + currentOctave;
+              } else {
+                return pitchOrder[currentIndex + 1] + (currentOctave + 1);
+              }
             }
           } else {
-            // Check if we need to increment octave when moving to next note in scale
-            const currentChromaticIndex = allPitchOrder.indexOf(noteName);
-            const nextScaleNote = pitchOrder[noteIndex + 1];
-            const nextChromaticIndex = allPitchOrder.indexOf(nextScaleNote);
-
-            if (nextChromaticIndex > currentChromaticIndex) {
-              newPitch = pitchOrder[noteIndex + 1] + octave;
+            if (currentIndex === 0) {
+              const currentChromaticIndex = allPitchOrder.indexOf(pitchOrder[currentIndex]);
+              const prevScaleNote = pitchOrder[pitchOrder.length - 1];
+              const prevChromaticIndex = allPitchOrder.indexOf(prevScaleNote);
+              if (prevChromaticIndex < currentChromaticIndex) {
+                return pitchOrder[pitchOrder.length - 1] + currentOctave;
+              } else {
+                return pitchOrder[pitchOrder.length - 1] + (currentOctave - 1);
+              }
             } else {
-              // Next scale note wraps around chromatically
-              newPitch = pitchOrder[noteIndex + 1] + (octave + 1);
+              const currentChromaticIndex = allPitchOrder.indexOf(pitchOrder[currentIndex]);
+              const prevScaleNote = pitchOrder[currentIndex - 1];
+              const prevChromaticIndex = allPitchOrder.indexOf(prevScaleNote);
+              if (prevChromaticIndex < currentChromaticIndex) {
+                return pitchOrder[currentIndex - 1] + currentOctave;
+              } else {
+                return pitchOrder[currentIndex - 1] + (currentOctave - 1);
+              }
             }
           }
-        } else {
-          if (noteIndex === 0) {
-            // When wrapping to the previous octave, need to check chromatic position
-            const currentChromaticIndex = allPitchOrder.indexOf(noteName);
-            const prevScaleNote = pitchOrder[pitchOrder.length - 1];
-            const prevChromaticIndex = allPitchOrder.indexOf(prevScaleNote);
+        };
 
-            // If previous scale note comes before current note chromatically, stay in same octave
-            // Otherwise, move to previous octave
-            if (prevChromaticIndex < currentChromaticIndex) {
-              newPitch = pitchOrder[pitchOrder.length - 1] + octave;
-            } else {
-              newPitch = pitchOrder[pitchOrder.length - 1] + (octave - 1);
-            }
-          } else {
-            // Check if we need to decrement octave when moving to previous note in scale
-            const currentChromaticIndex = allPitchOrder.indexOf(noteName);
-            const prevScaleNote = pitchOrder[noteIndex - 1];
-            const prevChromaticIndex = allPitchOrder.indexOf(prevScaleNote);
+        // Helper function to check if a pitch has collision
+        const hasCollision = (testPitch: string): boolean => {
+          return song.notes.some(n => {
+            if (n.id === selectedNoteId) return false;
+            if (n.pitch !== testPitch) return false;
+            const newEndTime = note.startTime + note.duration;
+            const existingEndTime = n.startTime + n.duration;
+            return (note.startTime < existingEndTime && newEndTime > n.startTime);
+          });
+        };
 
-            if (prevChromaticIndex < currentChromaticIndex) {
-              newPitch = pitchOrder[noteIndex - 1] + octave;
-            } else {
-              // Previous scale note wraps around chromatically
-              newPitch = pitchOrder[noteIndex - 1] + (octave - 1);
-            }
-          }
+        // Find the next available pitch by skipping occupied ones
+        let candidatePitch = getNextPitch(noteIndex, octave, e.key === 'ArrowUp' ? 'up' : 'down');
+        let candidateNoteName = candidatePitch.replace(/\d+/, '').replace(/b/g, '#');
+        let candidateOctave = parseInt(candidatePitch.match(/\d+/)?.[0] || '4');
+        let candidateIndex = pitchOrder.indexOf(candidateNoteName);
+
+        // Keep searching for a free position (max 24 semitones in either direction to prevent infinite loop)
+        let attempts = 0;
+        const maxAttempts = 24;
+        while (hasCollision(candidatePitch) && attempts < maxAttempts) {
+          candidatePitch = getNextPitch(candidateIndex, candidateOctave, e.key === 'ArrowUp' ? 'up' : 'down');
+          candidateNoteName = candidatePitch.replace(/\d+/, '').replace(/b/g, '#');
+          candidateOctave = parseInt(candidatePitch.match(/\d+/)?.[0] || '4');
+          candidateIndex = pitchOrder.indexOf(candidateNoteName);
+          attempts++;
         }
 
-        updateNote(selectedNoteId, { pitch: newPitch });
-        audioEngine.playNote(newPitch, note.duration);
+        // Only update if we found a valid position
+        if (!hasCollision(candidatePitch)) {
+          updateNote(selectedNoteId, { pitch: candidatePitch });
+          audioEngine.playNote(candidatePitch, note.duration);
+        }
       } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         e.preventDefault();
         const note = song.notes.find(n => n.id === selectedNoteId);
@@ -524,13 +549,20 @@ export function PianoRoll() {
         const newStartTime = Math.max(0, note.startTime + timeDelta);
 
         if (newStartTime !== note.startTime) {
-          const notesToUpdate = song.notes.filter(n => n.startTime > note.startTime);
-          notesToUpdate.forEach(n => {
-            updateNote(n.id, { startTime: n.startTime + timeDelta });
+          // Check for collisions with other notes on the same pitch
+          const wouldCollide = song.notes.some(n => {
+            if (n.id === selectedNoteId) return false;
+            if (n.pitch !== note.pitch) return false;
+            const newEndTime = newStartTime + note.duration;
+            const existingEndTime = n.startTime + n.duration;
+            return (newStartTime < existingEndTime && newEndTime > n.startTime);
           });
 
-          updateNote(selectedNoteId, { startTime: newStartTime });
-          setCursorPosition(newStartTime + note.duration);
+          if (!wouldCollide) {
+            updateNote(selectedNoteId, { startTime: newStartTime });
+            setCursorPosition(newStartTime + note.duration);
+            audioEngine.playNote(note.pitch, note.duration);
+          }
         }
       }
     };
@@ -660,7 +692,11 @@ export function PianoRoll() {
     if (draggedChord) {
       const deltaX = e.clientX - dragStart.x;
       const beatWidth = 60;
-      const beatDelta = Math.round(deltaX / beatWidth);
+
+      // Calculate movement in quarter beats (0.25)
+      const quarterBeatWidth = beatWidth / 4;
+      const quarterBeatDelta = Math.round(deltaX / quarterBeatWidth);
+      const beatDelta = quarterBeatDelta * 0.25;
 
       const chord = song.chords.find(c => c.id === draggedChord);
       if (!chord) return;
@@ -668,14 +704,19 @@ export function PianoRoll() {
       const newStartTime = Math.max(0, dragStart.startTime + beatDelta);
 
       if (newStartTime !== chord.startTime) {
-        const timeDelta = newStartTime - dragStart.startTime;
-
-        const chordsToUpdate = song.chords.filter(c => c.startTime > dragStart.startTime);
-        chordsToUpdate.forEach(c => {
-          updateChord(c.id, { startTime: c.startTime + timeDelta });
+        // Check for collisions with other chords
+        const wouldCollide = song.chords.some(c => {
+          if (c.id === draggedChord) return false;
+          const newEndTime = newStartTime + chord.duration;
+          const existingEndTime = c.startTime + c.duration;
+          // Check if the new position would overlap with existing chord
+          return (newStartTime < existingEndTime && newEndTime > c.startTime);
         });
 
-        updateChord(draggedChord, { startTime: newStartTime });
+        if (!wouldCollide) {
+          updateChord(draggedChord, { startTime: newStartTime });
+          audioEngine.playChord(chord.roman, song.key, chord.duration);
+        }
       }
     } else if (resizingChord) {
       const deltaX = e.clientX - dragStart.x;
@@ -709,6 +750,7 @@ export function PianoRoll() {
         const newComponents = durationToComponents(newDuration);
         updateChord(resizingChord, { duration: newDuration, durationComponents: newComponents });
         setDragStart({ ...dragStart, x: e.clientX });
+        audioEngine.playChord(chord.roman, song.key, newDuration);
       }
     } else if (draggedNote) {
       const deltaX = e.clientX - dragStart.x;
@@ -716,7 +758,10 @@ export function PianoRoll() {
       const beatWidth = 60;
       const rowHeight = 40;
 
-      const beatDelta = Math.round(deltaX / beatWidth);
+      // Calculate movement in quarter beats (0.25)
+      const quarterBeatWidth = beatWidth / 4;
+      const quarterBeatDelta = Math.round(deltaX / quarterBeatWidth);
+      const beatDelta = quarterBeatDelta * 0.25;
       const pitchDelta = Math.round(deltaY / rowHeight);
 
       const note = song.notes.find(n => n.id === draggedNote);
@@ -728,15 +773,20 @@ export function PianoRoll() {
       const newPitch = reversedNotes[newPitchIndex];
 
       if (newStartTime !== note.startTime || newPitch !== note.pitch) {
-        const timeDelta = newStartTime - dragStart.startTime;
-
-        const notesToUpdate = song.notes.filter(n => n.startTime > dragStart.startTime);
-        notesToUpdate.forEach(n => {
-          updateNote(n.id, { startTime: n.startTime + timeDelta });
+        // Check for collisions with other notes on the same pitch
+        const wouldCollide = song.notes.some(n => {
+          if (n.id === draggedNote) return false;
+          if (n.pitch !== newPitch) return false;
+          const newEndTime = newStartTime + note.duration;
+          const existingEndTime = n.startTime + n.duration;
+          // Check if the new position would overlap with existing note
+          return (newStartTime < existingEndTime && newEndTime > n.startTime);
         });
 
-        updateNote(draggedNote, { startTime: newStartTime, pitch: newPitch });
-        audioEngine.playNote(newPitch, note.duration);
+        if (!wouldCollide) {
+          updateNote(draggedNote, { startTime: newStartTime, pitch: newPitch });
+          audioEngine.playNote(newPitch, note.duration);
+        }
       }
     } else if (resizingNote) {
       const deltaX = e.clientX - dragStart.x;
@@ -770,6 +820,7 @@ export function PianoRoll() {
         const newComponents = durationToComponents(newDuration);
         updateNote(resizingNote, { duration: newDuration, durationComponents: newComponents });
         setDragStart({ ...dragStart, x: e.clientX });
+        audioEngine.playNote(note.pitch, newDuration);
       }
     }
   };
