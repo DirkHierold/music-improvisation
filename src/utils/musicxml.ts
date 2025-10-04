@@ -143,11 +143,11 @@ export function musicXMLToSong(xmlString: string): Song {
   const harmonyElements = xmlDoc.querySelectorAll('harmony');
   const chords: Chord[] = [];
 
-  let chordTime = 0;
   harmonyElements.forEach((harmonyElement) => {
     const rootElement = harmonyElement.querySelector('root root-step');
     const kindElement = harmonyElement.querySelector('kind');
     const offsetElement = harmonyElement.querySelector('offset');
+    const durationElement = harmonyElement.querySelector('duration');
 
     if (rootElement && kindElement) {
       const rootStep = rootElement.textContent || '';
@@ -171,19 +171,17 @@ export function musicXMLToSong(xmlString: string): Song {
       const roman = degreeToRoman[degree];
 
       if (roman) {
-        const offset = offsetElement ? parseInt(offsetElement.textContent || '0') / divisions : 0;
+        const startTime = offsetElement ? parseInt(offsetElement.textContent || '0') / divisions : 0;
+        const duration = durationElement ? parseInt(durationElement.textContent || '0') / divisions : 1;
 
         chords.push({
           id: crypto.randomUUID(),
           roman,
-          startTime: chordTime + offset,
-          duration: 1 // Default duration, will be updated if we find duration info
+          startTime,
+          duration
         });
       }
     }
-
-    // Advance chord time (simplified)
-    chordTime += 1;
   });
 
   return {
@@ -276,6 +274,7 @@ function generateChordsXML(chords: Chord[], divisions: number, key: string): str
     }
 
     const offset = Math.round(chord.startTime * divisions);
+    const duration = Math.round(chord.duration * divisions);
 
     return `      <harmony>
         <root>
@@ -283,6 +282,7 @@ function generateChordsXML(chords: Chord[], divisions: number, key: string): str
         </root>
         <kind>${kind}</kind>
         <offset>${offset}</offset>
+        <duration>${duration}</duration>
       </harmony>`;
   }).join('\n');
 }

@@ -42,23 +42,45 @@ const Timeline = styled.div`
   border-bottom: 1px solid #3c3c3c;
 `;
 
-const Beat = styled.div<{ $isMeasureStart: boolean; $chordColor?: string; $chordStartOffset?: number; $chordCoverage?: number }>`
+const Beat = styled.div<{ $isMeasureStart: boolean; $chordSegments?: Array<{ color: string; startOffset: number; coverage: number }> }>`
   width: 60px;
   border-left: 1px solid ${props => props.$isMeasureStart ? '#555' : 'transparent'};
   border-right: 1px solid #3a3a3a;
   flex-shrink: 0;
   position: relative;
   background: ${props => {
-    if (!props.$chordColor) return 'transparent';
-    const startOffset = props.$chordStartOffset || 0;
-    const coverage = props.$chordCoverage || 1;
-    const startPercent = startOffset * 100;
-    const endPercent = (startOffset + coverage) * 100;
+    if (!props.$chordSegments || props.$chordSegments.length === 0) return 'transparent';
 
-    if (startOffset === 0 && coverage >= 1) return props.$chordColor;
+    // Build a gradient that shows all chord segments
+    const gradientParts: string[] = [];
+    let currentPos = 0;
 
-    // Create a gradient: transparent until startOffset, then color for coverage, then transparent
-    return `linear-gradient(to right, transparent 0%, transparent ${startPercent}%, ${props.$chordColor} ${startPercent}%, ${props.$chordColor} ${endPercent}%, transparent ${endPercent}%)`;
+    // Sort segments by start offset
+    const sortedSegments = [...props.$chordSegments].sort((a, b) => a.startOffset - b.startOffset);
+
+    for (const segment of sortedSegments) {
+      const startPercent = segment.startOffset * 100;
+      const endPercent = (segment.startOffset + segment.coverage) * 100;
+
+      // Add transparent section before this segment if needed
+      if (currentPos < startPercent) {
+        gradientParts.push(`transparent ${currentPos}%`);
+        gradientParts.push(`transparent ${startPercent}%`);
+      }
+
+      // Add the colored segment
+      gradientParts.push(`${segment.color} ${startPercent}%`);
+      gradientParts.push(`${segment.color} ${endPercent}%`);
+
+      currentPos = endPercent;
+    }
+
+    // Add transparent section at the end if needed
+    if (currentPos < 100) {
+      gradientParts.push(`transparent ${currentPos}%`);
+    }
+
+    return `linear-gradient(to right, ${gradientParts.join(', ')})`;
   }};
 `;
 
@@ -338,12 +360,12 @@ export function PianoRoll() {
   const maxEnd = Math.max(maxNoteEnd, maxChordEnd);
   const totalRows = Math.ceil(maxEnd / beatsPerRow);
 
-  // Helper function to get the chord color for a specific beat and pitch
-  // Returns color, start offset within the beat, and coverage length
-  const getChordColorForBeat = (beat: number, pitch: string): { color: string; startOffset: number; coverage: number } | undefined => {
-    // Find the chord active at this beat range (beat to beat+1)
+  // Helper function to get the chord colors for a specific beat and pitch
+  // Returns an array of chord segments that should be colored in this beat
+  const getChordColorsForBeat = (beat: number, pitch: string): Array<{ color: string; startOffset: number; coverage: number }> => {
+    // Find all chords active at this beat range (beat to beat+1)
     const beatEndTime = beat + 1;
-    const activeChord = song.chords.find(
+    const activeChords = song.chords.filter(
       chord => {
         const chordEndTime = chord.startTime + chord.duration;
         // Chord is active if it overlaps with this beat cell [beat, beat+1)
@@ -351,44 +373,50 @@ export function PianoRoll() {
       }
     );
 
-    if (!activeChord) return undefined;
-
-    // Get the notes in this chord
-    const chordNotes = getChordNotes(activeChord.roman, song.key);
+    if (activeChords.length === 0) return [];
 
     // Extract the note name without octave
     const pitchName = pitch.replace(/\d+/, '').replace(/b/g, '#');
 
-    // Check if this pitch is in the chord
-    const isInChord = chordNotes.some(chordNote => {
-      const normalizedChordNote = chordNote.replace(/b/g, '#');
-      return normalizedChordNote === pitchName;
-    });
+    const segments: Array<{ color: string; startOffset: number; coverage: number }> = [];
 
-    if (!isInChord) return undefined;
+    // Process each chord and create segments
+    for (const chord of activeChords) {
+      // Get the notes in this chord
+      const chordNotes = getChordNotes(chord.roman, song.key);
 
-    // Get the base color for this note
-    const baseColor = NOTE_COLORS[pitchName.replace('#', '')] || '#888';
+      // Check if this pitch is in the chord
+      const isInChord = chordNotes.some(chordNote => {
+        const normalizedChordNote = chordNote.replace(/b/g, '#');
+        return normalizedChordNote === pitchName;
+      });
 
-    // Calculate how much of this beat cell should be colored
-    const chordStartTime = activeChord.startTime;
-    const chordEndTime = chordStartTime + activeChord.duration;
+      if (!isInChord) continue;
 
-    // Calculate the overlap between the chord and this beat cell
-    const overlapStart = Math.max(beat, chordStartTime);
-    const overlapEnd = Math.min(beatEndTime, chordEndTime);
+      // Get the base color for this note
+      const baseColor = NOTE_COLORS[pitchName.replace('#', '')] || '#888';
 
-    // Start offset: where within the beat cell does the chord begin (0-1)
-    const startOffset = overlapStart - beat;
-    // Coverage: how much of the beat cell is covered (0-1)
-    const coverage = overlapEnd - overlapStart;
+      // Calculate how much of this beat cell should be colored
+      const chordStartTime = chord.startTime;
+      const chordEndTime = chordStartTime + chord.duration;
 
-    // Convert to pastel by adding transparency
-    return {
-      color: baseColor + '20', // 20 is hex for ~12% opacity for a subtle pastel effect
-      startOffset,
-      coverage
-    };
+      // Calculate the overlap between the chord and this beat cell
+      const overlapStart = Math.max(beat, chordStartTime);
+      const overlapEnd = Math.min(beatEndTime, chordEndTime);
+
+      // Start offset: where within the beat cell does the chord begin (0-1)
+      const startOffset = overlapStart - beat;
+      // Coverage: how much of the beat cell is covered (0-1)
+      const coverage = overlapEnd - overlapStart;
+
+      segments.push({
+        color: baseColor + '20', // 20 is hex for ~12% opacity for a subtle pastel effect
+        startOffset,
+        coverage
+      });
+    }
+
+    return segments;
   };
 
   useEffect(() => {
@@ -895,14 +923,12 @@ export function PianoRoll() {
                 <Timeline>
                   {Array.from({ length: beatsPerRow }).map((_, beatIndex) => {
                     const absoluteBeat = rowStartBeat + beatIndex;
-                    const chordInfo = getChordColorForBeat(absoluteBeat, pitch);
+                    const chordSegments = getChordColorsForBeat(absoluteBeat, pitch);
                     return (
                       <Beat
-                        key={beatIndex}
+                        key={`${pitch}-${absoluteBeat}`}
                         $isMeasureStart={absoluteBeat % song.meter.beatsPerMeasure === 0}
-                        $chordColor={chordInfo?.color}
-                        $chordStartOffset={chordInfo?.startOffset}
-                        $chordCoverage={chordInfo?.coverage}
+                        $chordSegments={chordSegments.length > 0 ? chordSegments : undefined}
                         onClick={() => handleCellClick(pitch, absoluteBeat)}
                       >
                         <BeatClickArea onClick={(e) => handleBeatLineClick(e, absoluteBeat)} />

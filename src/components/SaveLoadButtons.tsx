@@ -47,7 +47,7 @@ const HiddenFileInput = styled.input`
 `;
 
 export function SaveLoadButtons() {
-  const { saveSong, loadSong } = useStore();
+  const { saveSong, loadSong, setSelectedNoteId, setSelectedChordId } = useStore();
   const [filename, setFilename] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -90,6 +90,11 @@ export function SaveLoadButtons() {
     }
   };
 
+  const handleInputFocus = () => {
+    setSelectedNoteId(null);
+    setSelectedChordId(null);
+  };
+
   return (
     <Container>
       <Input
@@ -98,6 +103,7 @@ export function SaveLoadButtons() {
         value={filename}
         onChange={(e) => setFilename(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+        onFocus={handleInputFocus}
       />
       <Button onClick={handleSave}>Save</Button>
 
