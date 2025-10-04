@@ -219,6 +219,176 @@ const ChordNameLabel = styled.div`
   opacity: 0.8;
 `;
 
+const TablatureRow = styled.div`
+  display: flex;
+  height: 280px;
+  position: relative;
+  border-top: 2px solid #555;
+`;
+
+const TablatureLabel = styled.div`
+  width: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #333;
+  border-right: 1px solid #3c3c3c;
+  border-bottom: 1px solid #3c3c3c;
+  font-size: 12px;
+  color: #888;
+  font-weight: bold;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+`;
+
+const TablatureTimeline = styled.div`
+  position: relative;
+  display: flex;
+  border-bottom: 1px solid #3c3c3c;
+  background-color: #3a2a1a;
+`;
+
+const TablatureString = styled.div<{ $stringIndex: number }>`
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: #C0C0C0;
+  top: ${props => 50 + props.$stringIndex * 60}px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  z-index: 1;
+`;
+
+const TablatureFretMarker = styled.div<{ $color: string; $selected: boolean }>`
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background-color: ${props => props.$color};
+  border: 2px solid ${props => props.$selected ? '#fff' : 'transparent'};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  font-size: 11px;
+  box-sizing: border-box;
+  z-index: 10;
+  cursor: pointer;
+
+  &:hover {
+    opacity: 0.9;
+  }
+`;
+
+// Ukulele tuning (standard GCEA)
+const UKULELE_TUNING = ['A4', 'E4', 'C4', 'G4'];
+const STRING_POSITIONS = [50, 110, 170, 230];
+
+// Standard ukulele chord shapes for each Roman numeral in C Major
+// Array index: [0: A-string, 1: E-string, 2: C-string, 3: G-string]
+const UKULELE_CHORD_SHAPES: Record<string, Record<'I' | 'II' | 'III' | 'IV' | 'V' | 'VI' | 'VII', number[]>> = {
+  'C Major': {
+    'I': [3, 0, 0, 0],    // C major: A3-C4-E4-G4
+    'II': [0, 2, 0, 0],   // D minor: A4-D4-F4-A4
+    'III': [4, 4, 3, 2],  // E minor: E4-E4-G4-B4
+    'IV': [0, 1, 0, 2],   // F major: A4-F4-C4-A4
+    'V': [2, 3, 2, 0],    // G major: B4-G4-D4-G4
+    'VI': [0, 0, 0, 0],   // A minor: A4-E4-C4-G4
+    'VII': [1, 2, 1, 2],  // B diminished: Bb4-F#4-D4-A4
+  },
+  'G Major': {
+    'I': [2, 3, 2, 0],    // G major
+    'II': [0, 2, 3, 1],   // A minor
+    'III': [4, 4, 3, 2],  // B minor
+    'IV': [0, 0, 0, 0],   // C major
+    'V': [0, 2, 3, 2],    // D major
+    'VI': [4, 0, 0, 0],   // E minor
+    'VII': [2, 3, 2, 3],  // F# diminished
+  },
+  'F Major': {
+    'I': [0, 1, 0, 2],    // F major
+    'II': [2, 0, 1, 0],   // G minor
+    'III': [0, 0, 0, 0],  // A minor
+    'IV': [1, 1, 0, 3],   // Bb major
+    'V': [3, 0, 0, 0],    // C major
+    'VI': [0, 2, 0, 0],   // D minor
+    'VII': [3, 4, 3, 5],  // E diminished
+  },
+};
+
+function getUkuleleChordShape(roman: 'I' | 'II' | 'III' | 'IV' | 'V' | 'VI' | 'VII', key: string): number[] {
+  // Return the chord shape for the given key, or fall back to C Major
+  const keyShapes = UKULELE_CHORD_SHAPES[key] || UKULELE_CHORD_SHAPES['C Major'];
+  return keyShapes[roman] || [0, 0, 0, 0];
+}
+
+function getNoteFromFret(string: number, fret: number): string {
+  const stringNote = UKULELE_TUNING[string];
+  const baseNote = stringNote.slice(0, -1);
+  const octave = parseInt(stringNote.slice(-1));
+
+  const chromatic = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const baseIndex = chromatic.indexOf(baseNote);
+  const newIndex = (baseIndex + fret) % 12;
+  const newOctave = octave + Math.floor((baseIndex + fret) / 12);
+
+  return `${chromatic[newIndex]}${newOctave}`;
+}
+
+function findBestFretPosition(targetPitch: string): { string: number; fret: number } | null {
+  const targetNote = targetPitch.slice(0, -1);
+
+  let bestPosition = null;
+  let bestFret = 999;
+
+  // Only search within the 12-fret limit
+  for (let string = 0; string < UKULELE_TUNING.length; string++) {
+    for (let fret = 0; fret <= 12; fret++) {
+      const fretNote = getNoteFromFret(string, fret);
+      if (fretNote === targetPitch) {
+        if (fret < bestFret) {
+          bestPosition = { string, fret };
+          bestFret = fret;
+        }
+      }
+    }
+  }
+
+  if (!bestPosition && targetNote === 'C') {
+    bestPosition = { string: 2, fret: 0 };
+  }
+
+  return bestPosition;
+}
+
+// Get the highest playable pitch on ukulele (A-string, 12th fret)
+function getMaxUkulelePitch(): string {
+  return getNoteFromFret(0, 12); // A-string (index 0), fret 12 = B5
+}
+
+// Get the lowest playable pitch on ukulele (C-string, open)
+function getMinUkulelePitch(): string {
+  return 'C4'; // C-string (index 2), fret 0
+}
+
+// Check if a pitch is within the playable range of ukulele
+function isWithinUkuleleRange(pitch: string): boolean {
+  const chromatic = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const getOrder = (p: string) => {
+    const noteName = p.replace(/\d+/, '').replace(/b/g, '#');
+    const octave = parseInt(p.match(/\d+/)?.[0] || '4');
+    const noteIndex = chromatic.indexOf(noteName);
+    return octave * 12 + noteIndex;
+  };
+
+  const pitchOrder = getOrder(pitch);
+  const minOrder = getOrder(getMinUkulelePitch());
+  const maxOrder = getOrder(getMaxUkulelePitch());
+
+  return pitchOrder >= minOrder && pitchOrder <= maxOrder;
+}
+
 export function PianoRoll() {
   const { song, isChromatic, selectedDuration, currentBeat, cursorPosition, isPlaying, addNote, updateNote, deleteNote, selectedNoteId, setSelectedNoteId, setSelectedDuration, setCursorPosition, selectedChordId, setSelectedChordId, updateChord, deleteChord } = useStore();
 
@@ -567,7 +737,7 @@ export function PianoRoll() {
         // Keep searching for a free position (max 24 semitones in either direction to prevent infinite loop)
         let attempts = 0;
         const maxAttempts = 24;
-        while (hasCollision(candidatePitch) && attempts < maxAttempts) {
+        while ((hasCollision(candidatePitch) || !isWithinUkuleleRange(candidatePitch)) && attempts < maxAttempts) {
           candidatePitch = getNextPitch(candidateIndex, candidateOctave, e.key === 'ArrowUp' ? 'up' : 'down');
           candidateNoteName = candidatePitch.replace(/\d+/, '').replace(/b/g, '#');
           candidateOctave = parseInt(candidatePitch.match(/\d+/)?.[0] || '4');
@@ -575,8 +745,8 @@ export function PianoRoll() {
           attempts++;
         }
 
-        // Only update if we found a valid position
-        if (!hasCollision(candidatePitch)) {
+        // Only update if we found a valid position within ukulele range
+        if (!hasCollision(candidatePitch) && isWithinUkuleleRange(candidatePitch)) {
           updateNote(selectedNoteId, { pitch: candidatePitch });
           audioEngine.playNote(candidatePitch, note.duration);
         }
@@ -657,6 +827,11 @@ export function PianoRoll() {
   };
 
   const handleCellClick = (pitch: string, beat: number) => {
+    // Don't allow adding notes outside ukulele range
+    if (!isWithinUkuleleRange(pitch)) {
+      return;
+    }
+
     const existingNote = song.notes.find(
       n => n.pitch === pitch && beat >= n.startTime && beat < n.startTime + n.duration
     );
@@ -813,6 +988,11 @@ export function PianoRoll() {
       const newPitch = reversedNotes[newPitchIndex];
 
       if (newStartTime !== note.startTime || newPitch !== note.pitch) {
+        // Check if new pitch is within ukulele range
+        if (!isWithinUkuleleRange(newPitch)) {
+          return; // Don't allow moving outside ukulele range
+        }
+
         // Check for collisions with other notes on the same pitch
         const wouldCollide = song.notes.some(n => {
           if (n.id === draggedNote) return false;
@@ -1043,6 +1223,192 @@ export function PianoRoll() {
                   })}
               </ChordTimeline>
             </ChordRow>
+            <TablatureRow>
+              <TablatureLabel>Ukulele</TablatureLabel>
+              <TablatureTimeline>
+                {Array.from({ length: beatsPerRow }).map((_, beatIndex) => {
+                  const absoluteBeat = rowStartBeat + beatIndex;
+                  return (
+                    <Beat
+                      key={beatIndex}
+                      $isMeasureStart={absoluteBeat % song.meter.beatsPerMeasure === 0}
+                    >
+                      <BeatClickArea onClick={(e) => handleBeatLineClick(e, absoluteBeat)} />
+                    </Beat>
+                  );
+                })}
+                <EndBar />
+                {/* Render ukulele strings */}
+                {UKULELE_TUNING.map((_, index) => (
+                  <TablatureString key={index} $stringIndex={index} />
+                ))}
+                {/* Render chords on tablature FIRST */}
+                {song.chords
+                  .filter(chord =>
+                    (chord.startTime >= rowStartBeat && chord.startTime < rowEndBeat) ||
+                    (chord.startTime < rowStartBeat && chord.startTime + chord.duration > rowStartBeat)
+                  )
+                  .map(chord => {
+                    const chordNotes = getChordNotes(chord.roman, song.key);
+                    const chordInfo = getChordInfo(chord.roman, song.key);
+
+                    const chordStart = chord.startTime;
+                    const chordEnd = chord.startTime + chord.duration;
+
+                    const visibleStart = Math.max(chordStart, rowStartBeat);
+                    const visibleEnd = Math.min(chordEnd, rowEndBeat);
+
+                    const relativeStart = visibleStart - rowStartBeat;
+                    const visibleDuration = visibleEnd - visibleStart;
+
+                    // Find all melody notes at this time
+                    const overlappingNotes = song.notes.filter(
+                      n => n.startTime < chordEnd && n.startTime + n.duration > chordStart
+                    );
+
+                    const chromatic = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+                    const getOrder = (pitch: string) => {
+                      const noteName = pitch.replace(/\d+/, '').replace(/b/g, '#');
+                      const octave = parseInt(pitch.match(/\d+/)?.[0] || '4');
+                      const noteIndex = chromatic.indexOf(noteName);
+                      return octave * 12 + noteIndex;
+                    };
+
+                    let maxMelodyNoteOrder = -1;
+                    const melodyNotePitches = new Set<string>();
+                    if (overlappingNotes.length > 0) {
+                      maxMelodyNoteOrder = Math.max(...overlappingNotes.map(n => getOrder(n.pitch)));
+                      // Store all melody note pitches to avoid duplicates
+                      overlappingNotes.forEach(n => melodyNotePitches.add(n.pitch));
+                    }
+
+                    // Try to find fret positions for chord notes
+                    const chordPositions: Array<{ string: number; fret: number; note: string; pitch: string }> = [];
+
+                    // If no melody notes overlap, use standard ukulele chord shape
+                    if (overlappingNotes.length === 0) {
+                      const chordShape = getUkuleleChordShape(chord.roman, song.key);
+
+                      chordShape.forEach((fret, stringIndex) => {
+                        const pitch = getNoteFromFret(stringIndex, fret);
+                        const noteName = pitch.replace(/\d+/, '').replace(/b/g, '#');
+                        chordPositions.push({
+                          string: stringIndex,
+                          fret: fret,
+                          note: noteName,
+                          pitch: pitch
+                        });
+                      });
+                    } else {
+                      // If melody notes exist, try to fill all 4 strings with chord notes
+                      // For each string, find the best chord note that fits
+                      for (let stringIndex = 0; stringIndex < UKULELE_TUNING.length; stringIndex++) {
+                        let foundPosition = null;
+
+                        // Try each chord note on this string
+                        for (const chordNote of chordNotes) {
+                          if (foundPosition) break;
+
+                          // Try different octaves, starting from the highest possible and going down
+                          for (let octave = 5; octave >= 2 && !foundPosition; octave--) {
+                            const pitch = `${chordNote}${octave}`;
+                            const noteOrder = getOrder(pitch);
+
+                            // Skip if this pitch is already played as a melody note
+                            if (melodyNotePitches.has(pitch)) {
+                              continue;
+                            }
+
+                            // Only use this chord note if it's below the highest melody note
+                            if (noteOrder < maxMelodyNoteOrder) {
+                              // Check if this pitch can be played on this specific string
+                              const position = findBestFretPosition(pitch);
+                              if (position && position.string === stringIndex) {
+                                foundPosition = { ...position, note: chordNote, pitch };
+                              }
+                            }
+                          }
+                        }
+
+                        // If we found a valid position for this string, add it
+                        if (foundPosition) {
+                          chordPositions.push(foundPosition);
+                        }
+                      }
+                    }
+
+                    // Position the markers at the center of the chord duration
+                    const markerX = relativeStart * 60 + (visibleDuration * 60) / 2 - 15;
+
+                    return chordPositions.map((pos, idx) => {
+                      const color = NOTE_COLORS[pos.note.replace('#', '').replace('b', '')] || chordInfo.color;
+                      const markerY = STRING_POSITIONS[pos.string] - 15;
+
+                      return (
+                        <TablatureFretMarker
+                          key={`${chord.id}-${idx}-${rowIndex}`}
+                          $color={color}
+                          $selected={selectedChordId === chord.id}
+                          style={{
+                            left: `${markerX}px`,
+                            top: `${markerY}px`,
+                          }}
+                        >
+                          {pos.fret === 0 ? 'O' : pos.fret}
+                        </TablatureFretMarker>
+                      );
+                    });
+                  })}
+                {/* Render notes on tablature LAST (so they appear on top) */}
+                {song.notes
+                  .filter(note => {
+                    // Filter by row visibility
+                    const inRow = (note.startTime >= rowStartBeat && note.startTime < rowEndBeat) ||
+                      (note.startTime < rowStartBeat && note.startTime + note.duration > rowStartBeat);
+
+                    // Check if note is playable on ukulele (within 12-fret range)
+                    if (!inRow) return false;
+                    const position = findBestFretPosition(note.pitch);
+                    return position !== null;
+                  })
+                  .map(note => {
+                    const position = findBestFretPosition(note.pitch);
+                    if (!position) return null;
+
+                    const noteName = note.pitch.replace(/\d+/, '');
+                    const color = NOTE_COLORS[noteName.replace('#', '').replace('b', '')] || '#888';
+
+                    const noteStart = note.startTime;
+                    const noteEnd = note.startTime + note.duration;
+
+                    const visibleStart = Math.max(noteStart, rowStartBeat);
+                    const visibleEnd = Math.min(noteEnd, rowEndBeat);
+
+                    const relativeStart = visibleStart - rowStartBeat;
+                    const visibleDuration = visibleEnd - visibleStart;
+
+                    const isContinuation = noteStart < rowStartBeat;
+
+                    // Position the marker at the center of the note duration
+                    const markerX = relativeStart * 60 + (visibleDuration * 60) / 2 - 15;
+                    const markerY = STRING_POSITIONS[position.string] - 15;
+
+                    return (
+                      <TablatureFretMarker
+                        key={`${note.id}-${rowIndex}`}
+                        $color={color}
+                        $selected={selectedNoteId === note.id}
+                        style={{
+                          left: `${markerX}px`,
+                          top: `${markerY}px`,
+                        }}
+                      >
+                        {position.fret === 0 ? 'O' : position.fret}
+                      </TablatureFretMarker>
+                    );
+                  })}
+              </TablatureTimeline>
+            </TablatureRow>
           </Grid>
         );
       })}
