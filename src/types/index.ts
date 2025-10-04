@@ -3,6 +3,7 @@ export interface Note {
   pitch: string;
   startTime: number;
   duration: number;
+  durationComponents?: NoteDuration[]; // Array of duration values that sum to duration
 }
 
 export interface Chord {
@@ -10,6 +11,7 @@ export interface Chord {
   roman: 'I' | 'II' | 'III' | 'IV' | 'V' | 'VI' | 'VII';
   startTime: number;
   duration: number;
+  durationComponents?: NoteDuration[]; // Array of duration values that sum to duration
 }
 
 export interface Meter {
@@ -104,4 +106,29 @@ export function getChordNotes(roman: 'I' | 'II' | 'III' | 'IV' | 'V' | 'VI' | 'V
   const fifthNote = scaleNotes[(degree + 4) % 7];
 
   return [rootNote, thirdNote, fifthNote];
+}
+
+/**
+ * Convert a duration value into an array of duration components
+ * Uses greedy algorithm to break down into standard durations
+ */
+export function durationToComponents(duration: number): NoteDuration[] {
+  const availableDurations: NoteDuration[] = [4, 2, 1, 0.5, 0.25];
+  const components: NoteDuration[] = [];
+  let remaining = duration;
+
+  for (const d of availableDurations) {
+    while (remaining >= d && remaining - d >= -0.001) { // Small epsilon for floating point
+      components.push(d);
+      remaining -= d;
+    }
+  }
+
+  // If we have a remainder, it means the duration doesn't fit standard components
+  // In this case, just return the original duration as a single component
+  if (Math.abs(remaining) > 0.001) {
+    return [duration as NoteDuration];
+  }
+
+  return components.sort((a, b) => b - a); // Sort descending
 }

@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { useStore } from '../store';
 import { NoteDuration } from '../types';
@@ -14,6 +15,17 @@ const Container = styled.div`
 const Title = styled.div`
   font-size: 12px;
   color: #888;
+  margin-bottom: 5px;
+`;
+
+const TotalDisplay = styled.div`
+  font-size: 14px;
+  color: #5dade2;
+  font-weight: bold;
+  padding: 5px;
+  text-align: center;
+  background-color: #2c2c2c;
+  border-radius: 3px;
   margin-bottom: 5px;
 `;
 
@@ -41,17 +53,39 @@ const durations: { value: NoteDuration; label: string }[] = [
 ];
 
 export function DurationPanel() {
-  const { selectedDuration, setSelectedDuration, selectedNoteId, updateNote, song, setCursorPosition } = useStore();
+  const { setSelectedDuration, selectedNoteId, updateNote, song, setCursorPosition } = useStore();
+  const [selectedComponents, setSelectedComponents] = useState<NoteDuration[]>([1]); // Start with 1 beat selected
 
   const handleDurationClick = (duration: NoteDuration) => {
-    setSelectedDuration(duration);
+    let newComponents: NoteDuration[];
+
+    if (selectedComponents.includes(duration)) {
+      // Trying to remove this duration
+      // Only allow if there's more than one component selected
+      if (selectedComponents.length > 1) {
+        newComponents = selectedComponents.filter(d => d !== duration);
+      } else {
+        // Can't remove the last duration - do nothing
+        return;
+      }
+    } else {
+      // Adding this duration
+      newComponents = [...selectedComponents, duration].sort((a, b) => b - a); // Sort descending
+    }
+
+    setSelectedComponents(newComponents);
+
+    // Calculate total duration
+    const totalDuration = newComponents.reduce((sum, d) => sum + d, 0);
+
+    setSelectedDuration(totalDuration as NoteDuration);
 
     if (selectedNoteId) {
       const note = song.notes.find(n => n.id === selectedNoteId);
       if (!note) return;
 
       const oldEndTime = note.startTime + note.duration;
-      const newEndTime = note.startTime + duration;
+      const newEndTime = note.startTime + totalDuration;
 
       if (newEndTime > oldEndTime) {
         const overlappingNotes = song.notes.filter(
@@ -68,18 +102,21 @@ export function DurationPanel() {
         }
       }
 
-      updateNote(selectedNoteId, { duration });
-      setCursorPosition(note.startTime + duration);
+      updateNote(selectedNoteId, { duration: totalDuration as NoteDuration });
+      setCursorPosition(note.startTime + totalDuration);
     }
   };
+
+  const totalDuration = selectedComponents.reduce((sum, d) => sum + d, 0);
 
   return (
     <Container>
       <Title>Duration</Title>
+      <TotalDisplay>{totalDuration} beats</TotalDisplay>
       {durations.map(({ value, label }) => (
         <DurationButton
           key={value}
-          $selected={selectedDuration === value}
+          $selected={selectedComponents.includes(value)}
           onClick={() => handleDurationClick(value)}
         >
           {label}

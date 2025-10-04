@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 import { useStore } from '../store';
-import { MAJOR_SCALES, CHROMATIC_NOTES, NOTE_COLORS, NoteDuration, getChordInfo, getChordNotes } from '../types';
+import { MAJOR_SCALES, CHROMATIC_NOTES, NOTE_COLORS, NoteDuration, getChordInfo, getChordNotes, durationToComponents } from '../types';
 import { audioEngine } from '../services/AudioEngine';
 
 const Container = styled.div`
@@ -42,13 +42,20 @@ const Timeline = styled.div`
   border-bottom: 1px solid #3c3c3c;
 `;
 
-const Beat = styled.div<{ $isMeasureStart: boolean; $chordColor?: string }>`
+const Beat = styled.div<{ $isMeasureStart: boolean; $chordColor?: string; $chordCoverage?: number }>`
   width: 60px;
   border-left: 1px solid ${props => props.$isMeasureStart ? '#555' : 'transparent'};
   border-right: 1px solid #3a3a3a;
   flex-shrink: 0;
   position: relative;
-  background-color: ${props => props.$chordColor || 'transparent'};
+  background: ${props => {
+    if (!props.$chordColor) return 'transparent';
+    const coverage = props.$chordCoverage || 1;
+    if (coverage >= 1) return props.$chordColor;
+    // Create a gradient that shows color for the coverage portion, then transparent
+    const coveragePercent = coverage * 100;
+    return `linear-gradient(to right, ${props.$chordColor} 0%, ${props.$chordColor} ${coveragePercent}%, transparent ${coveragePercent}%)`;
+  }};
 `;
 
 const BeatClickArea = styled.div`
@@ -328,7 +335,8 @@ export function PianoRoll() {
   const totalRows = Math.ceil(maxEnd / beatsPerRow);
 
   // Helper function to get the chord color for a specific beat and pitch
-  const getChordColorForBeat = (beat: number, pitch: string): string | undefined => {
+  // Returns color and the portion of the beat that should be colored (0-1)
+  const getChordColorForBeat = (beat: number, pitch: string): { color: string; coverage: number } | undefined => {
     // Find the chord active at this beat
     const activeChord = song.chords.find(
       chord => beat >= chord.startTime && beat < chord.startTime + chord.duration
@@ -353,8 +361,22 @@ export function PianoRoll() {
     // Get the base color for this note
     const baseColor = NOTE_COLORS[pitchName.replace('#', '')] || '#888';
 
+    // Calculate how much of this beat cell should be colored
+    // If chord ends within this beat, only color a portion
+    const chordEndTime = activeChord.startTime + activeChord.duration;
+    const beatEndTime = beat + 1;
+
+    let coverage = 1; // Default: full beat
+    if (chordEndTime < beatEndTime) {
+      // Chord ends within this beat cell
+      coverage = chordEndTime - beat;
+    }
+
     // Convert to pastel by adding transparency
-    return baseColor + '20'; // 20 is hex for ~12% opacity for a subtle pastel effect
+    return {
+      color: baseColor + '20', // 20 is hex for ~12% opacity for a subtle pastel effect
+      coverage
+    };
   };
 
   useEffect(() => {
@@ -588,10 +610,12 @@ export function PianoRoll() {
           });
       }
 
+      const components = durationToComponents(selectedDuration);
       addNote({
         pitch,
         startTime: beat,
         duration: selectedDuration,
+        durationComponents: components,
       });
     }
   };
@@ -661,7 +685,8 @@ export function PianoRoll() {
       const chord = song.chords.find(c => c.id === resizingChord);
       if (!chord) return;
 
-      const newDuration = Math.max(0.25, chord.duration + beatDelta * 0.25);
+      const MAX_DURATION = 7.75;
+      const newDuration = Math.max(0.25, Math.min(MAX_DURATION, chord.duration + beatDelta * 0.25));
       if (newDuration !== chord.duration) {
         const newEndTime = chord.startTime + newDuration;
         const oldEndTime = chord.startTime + chord.duration;
@@ -681,7 +706,8 @@ export function PianoRoll() {
           }
         }
 
-        updateChord(resizingChord, { duration: newDuration });
+        const newComponents = durationToComponents(newDuration);
+        updateChord(resizingChord, { duration: newDuration, durationComponents: newComponents });
         setDragStart({ ...dragStart, x: e.clientX });
       }
     } else if (draggedNote) {
@@ -720,7 +746,8 @@ export function PianoRoll() {
       const note = song.notes.find(n => n.id === resizingNote);
       if (!note) return;
 
-      const newDuration = Math.max(0.25, note.duration + beatDelta * 0.25);
+      const MAX_DURATION = 7.75;
+      const newDuration = Math.max(0.25, Math.min(MAX_DURATION, note.duration + beatDelta * 0.25));
       if (newDuration !== note.duration) {
         const newEndTime = note.startTime + newDuration;
         const oldEndTime = note.startTime + note.duration;
@@ -740,7 +767,8 @@ export function PianoRoll() {
           }
         }
 
-        updateNote(resizingNote, { duration: newDuration });
+        const newComponents = durationToComponents(newDuration);
+        updateNote(resizingNote, { duration: newDuration, durationComponents: newComponents });
         setDragStart({ ...dragStart, x: e.clientX });
       }
     }
@@ -804,12 +832,13 @@ export function PianoRoll() {
                 <Timeline>
                   {Array.from({ length: beatsPerRow }).map((_, beatIndex) => {
                     const absoluteBeat = rowStartBeat + beatIndex;
-                    const chordColor = getChordColorForBeat(absoluteBeat, pitch);
+                    const chordInfo = getChordColorForBeat(absoluteBeat, pitch);
                     return (
                       <Beat
                         key={beatIndex}
                         $isMeasureStart={absoluteBeat % song.meter.beatsPerMeasure === 0}
-                        $chordColor={chordColor}
+                        $chordColor={chordInfo?.color}
+                        $chordCoverage={chordInfo?.coverage}
                         onClick={() => handleCellClick(pitch, absoluteBeat)}
                       >
                         <BeatClickArea onClick={(e) => handleBeatLineClick(e, absoluteBeat)} />

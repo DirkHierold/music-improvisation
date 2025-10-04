@@ -1,6 +1,7 @@
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { useStore } from '../store';
-import { MAJOR_SCALES, CHROMATIC_NOTES, NOTE_COLORS, NoteDuration, getChordInfo } from '../types';
+import { MAJOR_SCALES, CHROMATIC_NOTES, NOTE_COLORS, NoteDuration, getChordInfo, durationToComponents } from '../types';
 import { audioEngine } from '../services/AudioEngine';
 
 const Container = styled.div`
@@ -184,10 +185,32 @@ const chords: ('I' | 'II' | 'III' | 'IV' | 'V' | 'VI' | 'VII')[] = ['I', 'II', '
 
 export function NoteButtons() {
   const { song, isChromatic, setIsChromatic, selectedDuration, setSelectedDuration, selectedNoteId, selectedChordId, updateNote, updateChord, setCursorPosition, cursorPosition, currentBeat, isPlaying, addNote, addChord } = useStore();
+  const [selectedComponents, setSelectedComponents] = useState<NoteDuration[]>([1]); // Start with 1 beat selected
 
   const notes = isChromatic
     ? CHROMATIC_NOTES
     : MAJOR_SCALES[song.key] || MAJOR_SCALES['C Major'];
+
+  // Sync selectedComponents when a note or chord is selected
+  useEffect(() => {
+    if (selectedNoteId) {
+      const note = song.notes.find(n => n.id === selectedNoteId);
+      if (note) {
+        // Use stored durationComponents or calculate from duration
+        const components = note.durationComponents || durationToComponents(note.duration);
+        setSelectedComponents(components);
+        setSelectedDuration(note.duration);
+      }
+    } else if (selectedChordId) {
+      const chord = song.chords.find(c => c.id === selectedChordId);
+      if (chord) {
+        // Use stored durationComponents or calculate from duration
+        const components = chord.durationComponents || durationToComponents(chord.duration);
+        setSelectedComponents(components);
+        setSelectedDuration(chord.duration);
+      }
+    }
+  }, [selectedNoteId, selectedChordId, song.notes, song.chords]);
 
   const handleNoteClick = async (noteName: string) => {
     await audioEngine.initialize();
@@ -233,6 +256,7 @@ export function NoteButtons() {
       pitch,
       startTime: insertPosition,
       duration: selectedDuration,
+      durationComponents: selectedComponents,
     });
   };
 
@@ -262,18 +286,45 @@ export function NoteButtons() {
       roman,
       startTime: insertPosition,
       duration: selectedDuration,
+      durationComponents: selectedComponents,
     });
   };
 
   const handleDurationClick = (duration: NoteDuration) => {
-    setSelectedDuration(duration);
+    let newComponents: NoteDuration[];
+
+    if (selectedComponents.includes(duration)) {
+      // Trying to remove this duration
+      // Only allow if there's more than one component selected
+      if (selectedComponents.length > 1) {
+        newComponents = selectedComponents.filter(d => d !== duration);
+      } else {
+        // Can't remove the last duration - do nothing
+        return;
+      }
+    } else {
+      // Adding this duration
+      newComponents = [...selectedComponents, duration].sort((a, b) => b - a); // Sort descending
+    }
+
+    // Calculate total duration
+    const totalDuration = newComponents.reduce((sum, d) => sum + d, 0);
+
+    // Enforce max duration of 7.75 beats (sum of all available durations)
+    const MAX_DURATION = 7.75;
+    if (totalDuration > MAX_DURATION) {
+      return; // Don't allow exceeding max duration
+    }
+
+    setSelectedComponents(newComponents);
+    setSelectedDuration(totalDuration as NoteDuration);
 
     if (selectedNoteId) {
       const note = song.notes.find(n => n.id === selectedNoteId);
       if (!note) return;
 
       const oldEndTime = note.startTime + note.duration;
-      const newEndTime = note.startTime + duration;
+      const newEndTime = note.startTime + totalDuration;
 
       if (newEndTime > oldEndTime) {
         const overlappingNotes = song.notes.filter(
@@ -290,14 +341,14 @@ export function NoteButtons() {
         }
       }
 
-      updateNote(selectedNoteId, { duration });
-      setCursorPosition(note.startTime + duration);
+      updateNote(selectedNoteId, { duration: totalDuration, durationComponents: newComponents });
+      setCursorPosition(note.startTime + totalDuration);
     } else if (selectedChordId) {
       const chord = song.chords.find(c => c.id === selectedChordId);
       if (!chord) return;
 
       const oldEndTime = chord.startTime + chord.duration;
-      const newEndTime = chord.startTime + duration;
+      const newEndTime = chord.startTime + totalDuration;
 
       if (newEndTime > oldEndTime) {
         const overlappingChords = song.chords.filter(
@@ -314,8 +365,8 @@ export function NoteButtons() {
         }
       }
 
-      updateChord(selectedChordId, { duration });
-      setCursorPosition(chord.startTime + duration);
+      updateChord(selectedChordId, { duration: totalDuration, durationComponents: newComponents });
+      setCursorPosition(chord.startTime + totalDuration);
     }
   };
 
@@ -367,12 +418,12 @@ export function NoteButtons() {
         </ChordButtonsRow>
       </ChordSection>
       <DurationSection>
-        <Title>Duration</Title>
+        <Title>Duration ({selectedComponents.reduce((sum, d) => sum + d, 0)} beats)</Title>
         <DurationButtonsRow>
           {durations.map(({ value, label }) => (
             <DurationButton
               key={value}
-              $selected={selectedDuration === value}
+              $selected={selectedComponents.includes(value)}
               onClick={() => handleDurationClick(value)}
             >
               {label}
