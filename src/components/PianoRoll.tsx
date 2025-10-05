@@ -362,6 +362,17 @@ function findBestFretPosition(targetPitch: string): { string: number; fret: numb
   return bestPosition;
 }
 
+// Find fret position for a specific pitch on a specific string
+function findFretPositionOnString(targetPitch: string, stringIndex: number): { string: number; fret: number } | null {
+  for (let fret = 0; fret <= 12; fret++) {
+    const fretNote = getNoteFromFret(stringIndex, fret);
+    if (fretNote === targetPitch) {
+      return { string: stringIndex, fret };
+    }
+  }
+  return null;
+}
+
 // Get the highest playable pitch on ukulele (A-string, 12th fret)
 function getMaxUkulelePitch(): string {
   return getNoteFromFret(0, 12); // A-string (index 0), fret 12 = B5
@@ -1282,8 +1293,26 @@ export function PianoRoll() {
                       overlappingNotes.forEach(n => melodyNotePitches.add(n.pitch));
                     }
 
+                    // Helper function to check if chord positions are strummable (no gaps)
+                    const isStrummable = (positions: Array<{ string: number; fret: number; note: string; pitch: string }>): boolean => {
+                      if (positions.length === 0) return false;
+                      if (positions.length === 1) return true;
+
+                      // Sort positions by string index
+                      const sortedStrings = positions.map(p => p.string).sort((a, b) => a - b);
+
+                      // Check if there are any gaps between strings
+                      for (let i = 0; i < sortedStrings.length - 1; i++) {
+                        if (sortedStrings[i + 1] - sortedStrings[i] > 1) {
+                          return false; // Gap found
+                        }
+                      }
+
+                      return true;
+                    };
+
                     // Try to find fret positions for chord notes
-                    const chordPositions: Array<{ string: number; fret: number; note: string; pitch: string }> = [];
+                    let chordPositions: Array<{ string: number; fret: number; note: string; pitch: string }> = [];
 
                     // If no melody notes overlap, use standard ukulele chord shape
                     if (overlappingNotes.length === 0) {
@@ -1303,14 +1332,13 @@ export function PianoRoll() {
                       // If melody notes exist, try to fill all 4 strings with chord notes
                       // For each string, find the best chord note that fits
                       for (let stringIndex = 0; stringIndex < UKULELE_TUNING.length; stringIndex++) {
-                        let foundPosition = null;
+                        let bestPosition = null;
+                        let lowestFret = 999;
 
                         // Try each chord note on this string
                         for (const chordNote of chordNotes) {
-                          if (foundPosition) break;
-
-                          // Try different octaves, starting from the highest possible and going down
-                          for (let octave = 5; octave >= 2 && !foundPosition; octave--) {
+                          // Try different octaves, starting from low to high for better voice leading
+                          for (let octave = 2; octave <= 5; octave++) {
                             const pitch = `${chordNote}${octave}`;
                             const noteOrder = getOrder(pitch);
 
@@ -1322,18 +1350,83 @@ export function PianoRoll() {
                             // Only use this chord note if it's below the highest melody note
                             if (noteOrder < maxMelodyNoteOrder) {
                               // Check if this pitch can be played on this specific string
-                              const position = findBestFretPosition(pitch);
-                              if (position && position.string === stringIndex) {
-                                foundPosition = { ...position, note: chordNote, pitch };
+                              const position = findFretPositionOnString(pitch, stringIndex);
+                              if (position && position.fret < lowestFret) {
+                                bestPosition = { ...position, note: chordNote, pitch };
+                                lowestFret = position.fret;
                               }
                             }
                           }
                         }
 
                         // If we found a valid position for this string, add it
-                        if (foundPosition) {
-                          chordPositions.push(foundPosition);
+                        if (bestPosition) {
+                          chordPositions.push(bestPosition);
                         }
+                      }
+
+                      // Check if the positions are strummable
+                      if (!isStrummable(chordPositions)) {
+                        // Try to fill gaps with chord notes
+                        chordPositions.sort((a, b) => a.string - b.string);
+
+                        // Find which strings are missing
+                        const usedStrings = new Set(chordPositions.map(p => p.string));
+                        const minString = Math.min(...chordPositions.map(p => p.string));
+                        const maxString = Math.max(...chordPositions.map(p => p.string));
+
+                        // Try to fill gaps between min and max string
+                        for (let stringIndex = minString; stringIndex <= maxString; stringIndex++) {
+                          if (usedStrings.has(stringIndex)) continue;
+
+                          // Try to find a chord note for this string
+                          let foundPosition = null;
+                          let bestPositionBelowMelody = null;
+                          let lowestFretBelowMelody = 999;
+                          let lowestFretAny = 999;
+
+                          // Try each chord note on this string
+                          for (const chordNote of chordNotes) {
+                            // Try different octaves, prioritizing lower octaves
+                            for (let octave = 2; octave <= 5; octave++) {
+                              const pitch = `${chordNote}${octave}`;
+
+                              // Skip if this pitch is already played as a melody note
+                              if (melodyNotePitches.has(pitch)) {
+                                continue;
+                              }
+
+                              // Check if this pitch can be played on this specific string
+                              const position = findFretPositionOnString(pitch, stringIndex);
+                              if (position) {
+                                const noteOrder = getOrder(pitch);
+
+                                // Prefer notes below the melody, but accept any chord note if needed
+                                if (noteOrder < maxMelodyNoteOrder) {
+                                  // This is below the melody - prefer this with lowest fret
+                                  if (position.fret < lowestFretBelowMelody) {
+                                    bestPositionBelowMelody = { ...position, note: chordNote, pitch };
+                                    lowestFretBelowMelody = position.fret;
+                                  }
+                                } else if (position.fret < lowestFretAny) {
+                                  // This is at or above melody - use as fallback with lowest fret
+                                  foundPosition = { ...position, note: chordNote, pitch };
+                                  lowestFretAny = position.fret;
+                                }
+                              }
+                            }
+                          }
+
+                          // Prefer position below melody, fall back to any position
+                          const positionToUse = bestPositionBelowMelody || foundPosition;
+                          if (positionToUse) {
+                            chordPositions.push(positionToUse);
+                            usedStrings.add(stringIndex);
+                          }
+                        }
+
+                        // Re-sort after adding gap fillers
+                        chordPositions.sort((a, b) => a.string - b.string);
                       }
                     }
 
