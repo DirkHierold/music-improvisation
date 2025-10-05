@@ -1429,7 +1429,6 @@ export function PianoRoll() {
                     const chordEnd = chord.startTime + chord.duration;
 
                     const visibleStart = Math.max(chordStart, rowStartBeat);
-                    const visibleEnd = Math.min(chordEnd, rowEndBeat);
 
                     const relativeStart = visibleStart - rowStartBeat;
 
@@ -1633,10 +1632,8 @@ export function PianoRoll() {
                     const color = NOTE_COLORS[noteName.replace('#', '').replace('b', '')] || '#888';
 
                     const noteStart = note.startTime;
-                    const noteEnd = note.startTime + note.duration;
 
                     const visibleStart = Math.max(noteStart, rowStartBeat);
-                    const visibleEnd = Math.min(noteEnd, rowEndBeat);
 
                     const relativeStart = visibleStart - rowStartBeat;
 
