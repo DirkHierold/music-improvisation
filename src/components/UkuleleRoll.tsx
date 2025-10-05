@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import styled from 'styled-components';
 import { useStore } from '../store';
 import { NOTE_COLORS } from '../types';
 import { audioEngine } from '../services/AudioEngine';
 import * as Tone from 'tone';
+import { calculateUkuleleNotes } from './PianoRoll';
 
 const Container = styled.div`
   flex: 1;
@@ -151,6 +152,18 @@ export function UkuleleRoll() {
 
   const { song, currentBeat, isPlaying, setIsPlaying, setCurrentBeat, setCursorPosition } = useStore();
 
+  // Calculate ukulele notes (includes both chord positions and melody notes)
+  const ukuleleNotes = useMemo(() => {
+    const notes = calculateUkuleleNotes(song.notes, song.chords, song.key);
+    return notes.map((n, idx) => ({
+      id: `ukulele-${n.startTime}-${n.pitch}-${idx}`,
+      pitch: n.pitch,
+      startTime: n.startTime,
+      duration: n.duration,
+      stringIndex: n.stringIndex
+    }));
+  }, [song.notes, song.chords, song.key]);
+
   // Update container width when component mounts or resizes
   useEffect(() => {
     const updateWidth = () => {
@@ -173,32 +186,14 @@ export function UkuleleRoll() {
   }
 
   useEffect(() => {
-    if (isPlaying) {
-      startTimeRef.current = performance.now();
-      playedNotes.current.clear();
-      animationRef.current = requestAnimationFrame(animate);
-    } else {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-      playedNotes.current.clear();
-    }
-
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
+    const animate = () => {
+      if (isPlaying) {
+        checkForNotesToPlay();
+        animationRef.current = requestAnimationFrame(animate);
       }
     };
-  }, [isPlaying]);
 
-  const animate = () => {
-    if (isPlaying) {
-      checkForNotesToPlay();
-      animationRef.current = requestAnimationFrame(animate);
-    }
-  };
-
-  const checkForNotesToPlay = async () => {
+    const checkForNotesToPlay = async () => {
     if (!containerRef.current || !isPlaying) return;
 
     const latestBeat = currentBeatRef.current; // Use ref for latest value!
@@ -212,7 +207,7 @@ export function UkuleleRoll() {
     const pixelsPerBeat = 60; // Match PianoRoll spacing
 
     // Check each note for triggering
-    for (const note of song.notes) {
+    for (const note of ukuleleNotes) {
       const noteId = note.id;
 
       // Trigger logic: trigger when note reaches trigger line after traveling from right
@@ -237,9 +232,9 @@ export function UkuleleRoll() {
     }
 
     // Completion check - wait until all notes have been played AND last note has traveled off screen
-    const totalNotes = song.notes.length;
+    const totalNotes = ukuleleNotes.length;
     const playedCount = playedNotes.current.size;
-    const lastNoteTime = song.notes.length > 0 ? Math.max(...song.notes.map(n => n.startTime)) : 0;
+    const lastNoteTime = ukuleleNotes.length > 0 ? Math.max(...ukuleleNotes.map(n => n.startTime)) : 0;
     const travelTimeBeats = (containerWidth - 30) / pixelsPerBeat;
     // Time for last note to travel from trigger line to completely off left side
     const timeToExitScreen = (30 + 50) / pixelsPerBeat; // From trigger (30px) to off-screen (-50px)
@@ -255,14 +250,32 @@ export function UkuleleRoll() {
       setCurrentBeat(0);
 
       // Calculate end position after the last note
-      const endPosition = song.notes.length > 0
-        ? Math.max(...song.notes.map(note => note.startTime + note.duration))
+      const endPosition = ukuleleNotes.length > 0
+        ? Math.max(...ukuleleNotes.map(note => note.startTime + note.duration))
         : 0;
       setCursorPosition(endPosition);
 
       playedNotes.current.clear();
     }
-  };
+    };
+
+    if (isPlaying) {
+      startTimeRef.current = performance.now();
+      playedNotes.current.clear();
+      animationRef.current = requestAnimationFrame(animate);
+    } else {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+      playedNotes.current.clear();
+    }
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [isPlaying, ukuleleNotes, song.tempo]);
 
   const pixelsPerBeat = 60; // Match PianoRoll spacing
 
@@ -335,8 +348,7 @@ export function UkuleleRoll() {
 
     const latestBeat = currentBeatRef.current;
 
-
-    return song.notes.map(note => {
+    return ukuleleNotes.map(note => {
       // Notes move at constant speed matching editor spacing
       // Note position based on time relative to when it should be triggered after traveling
       const travelTimeBeats = (containerWidth - 30) / pixelsPerBeat; // Time to travel from right edge to trigger
@@ -345,8 +357,31 @@ export function UkuleleRoll() {
       // Position: trigger line (30px) + time offset * pixels per beat
       const noteStartX = 30 - (timeDifference * pixelsPerBeat);
 
-      const position = findBestFretPosition(note.pitch);
-      if (!position) return null;
+      // Use stringIndex from calculated ukulele notes if available
+      let stringIndex = note.stringIndex;
+      let fret = 0;
+
+      if (stringIndex !== undefined) {
+        // Calculate fret from pitch and string
+        const stringNote = UKULELE_TUNING[stringIndex];
+        const baseNote = stringNote.slice(0, -1);
+        const octave = parseInt(stringNote.slice(-1));
+        const chromatic = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const baseIndex = chromatic.indexOf(baseNote);
+
+        const targetNote = note.pitch.slice(0, -1);
+        const targetOctave = parseInt(note.pitch.slice(-1));
+        const targetIndex = chromatic.indexOf(targetNote);
+
+        const semitoneDiff = (targetOctave - octave) * 12 + (targetIndex - baseIndex);
+        fret = semitoneDiff;
+      } else {
+        // Fallback to findBestFretPosition
+        const position = findBestFretPosition(note.pitch);
+        if (!position) return null;
+        stringIndex = position.string;
+        fret = position.fret;
+      }
 
       const noteWidth = note.duration * pixelsPerBeat;
 
@@ -360,7 +395,7 @@ export function UkuleleRoll() {
       if (latestBeat < timeWhenNoteAppearsAtRightEdge || noteStartX + noteWidth < -50) {
         return null;
       }
-      const noteY = STRING_POSITIONS[position.string] - 20;
+      const noteY = STRING_POSITIONS[stringIndex] - 20;
       const noteColor = NOTE_COLORS[note.pitch.slice(0, -1)] || '#666';
 
       return (
@@ -371,7 +406,7 @@ export function UkuleleRoll() {
           $width={noteWidth}
           $color={noteColor}
         >
-          {position.fret === 0 ? 'O' : position.fret}
+          {fret === 0 ? 'O' : fret}
         </NoteElement>
       );
     }).filter(Boolean);

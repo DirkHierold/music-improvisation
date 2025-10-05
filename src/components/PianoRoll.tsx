@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 import { useStore } from '../store';
-import { MAJOR_SCALES, CHROMATIC_NOTES, NOTE_COLORS, NoteDuration, getChordInfo, getChordNotes, durationToComponents } from '../types';
+import { MAJOR_SCALES, CHROMATIC_NOTES, NOTE_COLORS, NoteDuration, getChordInfo, getChordNotes, durationToComponents, Note, Chord } from '../types';
 import { audioEngine } from '../services/AudioEngine';
 
 const Container = styled.div`
@@ -381,6 +381,168 @@ function getMaxUkulelePitch(): string {
 // Get the lowest playable pitch on ukulele (C-string, open)
 function getMinUkulelePitch(): string {
   return 'C4'; // C-string (index 2), fret 0
+}
+
+// Export function to calculate all ukulele notes for playback
+export function calculateUkuleleNotes(notes: Note[], chords: Chord[], key: string): Array<{ pitch: string; startTime: number; duration: number; stringIndex?: number }> {
+  const ukuleleNotes: Array<{ pitch: string; startTime: number; duration: number; stringIndex?: number }> = [];
+  const processedTimes = new Set<string>();
+
+  const chromatic = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const getOrder = (pitch: string) => {
+    const noteName = pitch.replace(/\d+/, '').replace(/b/g, '#');
+    const octave = parseInt(pitch.match(/\d+/)?.[0] || '4');
+    const noteIndex = chromatic.indexOf(noteName);
+    return octave * 12 + noteIndex;
+  };
+
+  // Helper function to check if chord positions are strummable (no gaps)
+  const isStrummable = (positions: Array<{ string: number; fret: number; note: string; pitch: string }>): boolean => {
+    if (positions.length === 0) return false;
+    if (positions.length === 1) return true;
+    const sortedStrings = positions.map(p => p.string).sort((a, b) => a - b);
+    for (let i = 0; i < sortedStrings.length - 1; i++) {
+      if (sortedStrings[i + 1] - sortedStrings[i] > 1) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  // Process each chord
+  chords.forEach(chord => {
+    const chordNotes = getChordNotes(chord.roman, key);
+    const chordStart = chord.startTime;
+    const chordEnd = chord.startTime + chord.duration;
+
+    // Find overlapping melody notes
+    const overlappingNotes = notes.filter(
+      n => n.startTime < chordEnd && n.startTime + n.duration > chordStart
+    );
+
+    let maxMelodyNoteOrder = -1;
+    const melodyNotePitches = new Set<string>();
+    if (overlappingNotes.length > 0) {
+      maxMelodyNoteOrder = Math.max(...overlappingNotes.map(n => getOrder(n.pitch)));
+      overlappingNotes.forEach(n => melodyNotePitches.add(n.pitch));
+    }
+
+    let chordPositions: Array<{ string: number; fret: number; note: string; pitch: string }> = [];
+
+    // If no melody notes overlap, use standard chord shape
+    if (overlappingNotes.length === 0) {
+      const chordShape = getUkuleleChordShape(chord.roman, key);
+      chordShape.forEach((fret, stringIndex) => {
+        const pitch = getNoteFromFret(stringIndex, fret);
+        const noteName = pitch.replace(/\d+/, '').replace(/b/g, '#');
+        chordPositions.push({ string: stringIndex, fret, note: noteName, pitch });
+      });
+    } else {
+      // With melody notes, fill strings with chord notes
+      for (let stringIndex = 0; stringIndex < UKULELE_TUNING.length; stringIndex++) {
+        let bestPosition = null;
+        let lowestFret = 999;
+
+        for (const chordNote of chordNotes) {
+          for (let octave = 2; octave <= 5; octave++) {
+            const pitch = `${chordNote}${octave}`;
+            const noteOrder = getOrder(pitch);
+
+            if (melodyNotePitches.has(pitch)) continue;
+
+            if (noteOrder < maxMelodyNoteOrder) {
+              const position = findFretPositionOnString(pitch, stringIndex);
+              if (position && position.fret < lowestFret) {
+                bestPosition = { ...position, note: chordNote, pitch };
+                lowestFret = position.fret;
+              }
+            }
+          }
+        }
+
+        if (bestPosition) {
+          chordPositions.push(bestPosition);
+        }
+      }
+
+      // Fill gaps if not strummable
+      if (!isStrummable(chordPositions)) {
+        chordPositions.sort((a, b) => a.string - b.string);
+        const usedStrings = new Set(chordPositions.map(p => p.string));
+        const minString = Math.min(...chordPositions.map(p => p.string));
+        const maxString = Math.max(...chordPositions.map(p => p.string));
+
+        for (let stringIndex = minString; stringIndex <= maxString; stringIndex++) {
+          if (usedStrings.has(stringIndex)) continue;
+
+          let bestPositionBelowMelody = null;
+          let foundPosition = null;
+          let lowestFretBelowMelody = 999;
+          let lowestFretAny = 999;
+
+          for (const chordNote of chordNotes) {
+            for (let octave = 2; octave <= 5; octave++) {
+              const pitch = `${chordNote}${octave}`;
+              if (melodyNotePitches.has(pitch)) continue;
+
+              const position = findFretPositionOnString(pitch, stringIndex);
+              if (position) {
+                const noteOrder = getOrder(pitch);
+                if (noteOrder < maxMelodyNoteOrder) {
+                  if (position.fret < lowestFretBelowMelody) {
+                    bestPositionBelowMelody = { ...position, note: chordNote, pitch };
+                    lowestFretBelowMelody = position.fret;
+                  }
+                } else if (position.fret < lowestFretAny) {
+                  foundPosition = { ...position, note: chordNote, pitch };
+                  lowestFretAny = position.fret;
+                }
+              }
+            }
+          }
+
+          const positionToUse = bestPositionBelowMelody || foundPosition;
+          if (positionToUse) {
+            chordPositions.push(positionToUse);
+            usedStrings.add(stringIndex);
+          }
+        }
+      }
+    }
+
+    // Add chord positions as ukulele notes
+    chordPositions.forEach(pos => {
+      const timeKey = `${chordStart}-${pos.pitch}-${pos.string}`;
+      if (!processedTimes.has(timeKey)) {
+        ukuleleNotes.push({
+          pitch: pos.pitch,
+          startTime: chordStart,
+          duration: chord.duration,
+          stringIndex: pos.string
+        });
+        processedTimes.add(timeKey);
+      }
+    });
+  });
+
+  // Add melody notes
+  notes.forEach(note => {
+    const position = findBestFretPosition(note.pitch);
+    if (position) {
+      const timeKey = `${note.startTime}-${note.pitch}-${position.string}`;
+      if (!processedTimes.has(timeKey)) {
+        ukuleleNotes.push({
+          pitch: note.pitch,
+          startTime: note.startTime,
+          duration: note.duration,
+          stringIndex: position.string
+        });
+        processedTimes.add(timeKey);
+      }
+    }
+  });
+
+  return ukuleleNotes.sort((a, b) => a.startTime - b.startTime);
 }
 
 // Check if a pitch is within the playable range of ukulele
