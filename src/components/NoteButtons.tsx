@@ -200,7 +200,7 @@ export function NoteButtons() {
         // Use stored durationComponents or calculate from duration
         const components = note.durationComponents || durationToComponents(note.duration);
         setSelectedComponents(components);
-        setSelectedDuration(note.duration);
+        setSelectedDuration(note.duration as NoteDuration);
       }
     } else if (selectedChordId) {
       const chord = song.chords.find(c => c.id === selectedChordId);
@@ -208,7 +208,7 @@ export function NoteButtons() {
         // Use stored durationComponents or calculate from duration
         const components = chord.durationComponents || durationToComponents(chord.duration);
         setSelectedComponents(components);
-        setSelectedDuration(chord.duration);
+        setSelectedDuration(chord.duration as NoteDuration);
       }
     }
   }, [selectedNoteId, selectedChordId, song.notes, song.chords]);

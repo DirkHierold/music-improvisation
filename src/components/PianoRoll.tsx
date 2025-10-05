@@ -1432,7 +1432,6 @@ export function PianoRoll() {
                     const visibleEnd = Math.min(chordEnd, rowEndBeat);
 
                     const relativeStart = visibleStart - rowStartBeat;
-                    const visibleDuration = visibleEnd - visibleStart;
 
                     // Find all melody notes at this time
                     const overlappingNotes = song.notes.filter(
@@ -1640,9 +1639,6 @@ export function PianoRoll() {
                     const visibleEnd = Math.min(noteEnd, rowEndBeat);
 
                     const relativeStart = visibleStart - rowStartBeat;
-                    const visibleDuration = visibleEnd - visibleStart;
-
-                    const isContinuation = noteStart < rowStartBeat;
 
                     // Position the marker at the start of the note (left edge)
                     const markerX = relativeStart * 60 - 15;
