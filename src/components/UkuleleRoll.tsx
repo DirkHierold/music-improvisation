@@ -6,13 +6,14 @@ import { audioEngine } from '../services/AudioEngine';
 import * as Tone from 'tone';
 import { calculateUkuleleNotes } from './PianoRoll';
 
-const Container = styled.div`
+const Container = styled.div<{ $isDragging: boolean }>`
   flex: 1;
   background-color: #2a2a2a;
   border-radius: 5px;
   overflow: hidden;
   position: relative;
   height: 300px;
+  cursor: ${props => props.$isDragging ? 'grabbing' : 'grab'};
 `;
 
 const UkuleleFretboard = styled.div`
@@ -70,6 +71,7 @@ const TriggerLine = styled.div`
   background-color: #ff4444;
   z-index: 20;
   box-shadow: 0 0 4px rgba(255, 68, 68, 0.5);
+  pointer-events: none;
 `;
 
 const BeatLine = styled.div.attrs<{ $x: number }>(props => ({
@@ -149,6 +151,10 @@ export function UkuleleRoll() {
   const lastBeat = useRef<number>(0);
   const currentBeatRef = useRef<number>(0); // Fix closure issue!
   const [containerWidth, setContainerWidth] = useState(800);
+  const [isDragging, setIsDragging] = useState(false);
+  const [hasBeenScrubbed, setHasBeenScrubbed] = useState(false);
+  const dragStartX = useRef<number>(0);
+  const dragStartBeat = useRef<number>(0);
 
   const { song, currentBeat, isPlaying, setIsPlaying, setCurrentBeat, setCursorPosition } = useStore();
 
@@ -262,6 +268,7 @@ export function UkuleleRoll() {
     if (isPlaying) {
       startTimeRef.current = performance.now();
       playedNotes.current.clear();
+      setHasBeenScrubbed(false); // Reset scrub state when playing starts
       animationRef.current = requestAnimationFrame(animate);
     } else {
       if (animationRef.current) {
@@ -280,12 +287,12 @@ export function UkuleleRoll() {
   const pixelsPerBeat = 60; // Match PianoRoll spacing
 
   const renderBeatLines = () => {
-    const latestBeat = isPlaying ? currentBeatRef.current : 0;
+    const latestBeat = (isPlaying || isDragging || hasBeenScrubbed) ? currentBeatRef.current : 0;
     const travelTimeBeats = (containerWidth - 30) / pixelsPerBeat;
     const lines = [];
 
-    if (!isPlaying) {
-      // When not playing, show static lines across the screen
+    if (!isPlaying && !isDragging && !hasBeenScrubbed) {
+      // When not playing and not dragging and not scrubbed, show static lines across the screen
       const beatsToShow = Math.ceil(containerWidth / pixelsPerBeat) + 2;
 
       for (let beat = 0; beat <= beatsToShow; beat++) {
@@ -310,7 +317,7 @@ export function UkuleleRoll() {
         }
       }
     } else {
-      // When playing, show moving lines
+      // When playing or dragging or scrubbed, show moving lines
       const startBeat = Math.floor(latestBeat - travelTimeBeats) - 5;
       const endBeat = Math.ceil(latestBeat + 5);
 
@@ -340,9 +347,56 @@ export function UkuleleRoll() {
     return lines;
   };
 
+  const handleContainerMouseDown = (e: React.MouseEvent) => {
+    if (!containerRef.current) return;
+
+    e.preventDefault();
+
+    // Pause playback immediately and stop audio engine
+    if (isPlaying) {
+      audioEngine.stopPlayback();
+      setIsPlaying(false);
+    }
+
+    setIsDragging(true);
+    setHasBeenScrubbed(true);
+    dragStartX.current = e.clientX;
+    dragStartBeat.current = currentBeat;
+  };
+
+  const handleContainerMouseMove = (e: MouseEvent) => {
+    if (!isDragging || !containerRef.current) return;
+
+    const deltaX = e.clientX - dragStartX.current;
+    const pixelsPerBeat = 60;
+    const beatDelta = -deltaX / pixelsPerBeat; // Negative because dragging right should go back in time
+
+    const newBeat = Math.max(0, dragStartBeat.current + beatDelta);
+
+    setCurrentBeat(newBeat);
+    setCursorPosition(newBeat); // Update cursor position for playback continuation
+    playedNotes.current.clear();
+  };
+
+  const handleContainerMouseUp = () => {
+    if (!isDragging) return;
+    setIsDragging(false);
+  };
+
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener('mousemove', handleContainerMouseMove);
+      window.addEventListener('mouseup', handleContainerMouseUp);
+      return () => {
+        window.removeEventListener('mousemove', handleContainerMouseMove);
+        window.removeEventListener('mouseup', handleContainerMouseUp);
+      };
+    }
+  }, [isDragging, currentBeat]);
+
   const renderNotes = () => {
-    // Only show notes when playing
-    if (!isPlaying) {
+    // Only show notes when playing, dragging, or has been scrubbed
+    if (!isPlaying && !isDragging && !hasBeenScrubbed) {
       return [];
     }
 
@@ -413,7 +467,11 @@ export function UkuleleRoll() {
   };
 
   return (
-    <Container ref={containerRef}>
+    <Container
+      ref={containerRef}
+      $isDragging={isDragging}
+      onMouseDown={handleContainerMouseDown}
+    >
       <UkuleleFretboard>
         {UKULELE_TUNING.map((_, index) => (
           <String key={index} $stringIndex={index} />
