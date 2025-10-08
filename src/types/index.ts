@@ -4,7 +4,8 @@ export interface Note {
   startTime: number;
   duration: number;
   durationComponents?: NoteDuration[]; // Array of duration values that sum to duration
-  preferredString?: number; // Preferred ukulele string for this note (0-3)
+  preferredString?: number; // DEPRECATED: Use tablatureStrings instead. Kept for backward compatibility.
+  tablatureStrings?: number[]; // Array of ukulele strings where this note should be shown (0-3), or empty to hide
 }
 
 export interface Chord {
