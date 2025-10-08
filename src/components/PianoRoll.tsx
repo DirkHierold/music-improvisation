@@ -1395,37 +1395,10 @@ export function PianoRoll() {
         }
       } else {
         // No existing melody note with this pitch at this time
-
-        if (isChordContext) {
-          // In chord context: Check if this pitch is part of the current chord
-          // If yes, we can create a melody note for it (user wants to "play along" with chord)
-          const currentChord = song.chords.find(c =>
-            c.startTime <= timePosition && c.startTime + c.duration > timePosition
-          );
-
-          if (currentChord) {
-            const chordNotes = getChordNotes(currentChord.roman, song.key);
-            const selectedNoteName = option.pitch.slice(0, -1); // Remove octave
-
-            // Check if the selected note is part of this chord
-            const isPartOfChord = chordNotes.some(note =>
-              note.replace('#', '').replace('b', '') === selectedNoteName.replace('#', '').replace('b', '')
-            );
-
-            if (isPartOfChord) {
-              // This is a chord note - allow creating it as a melody note
-              const components = durationToComponents(selectedDuration);
-              addNote({
-                pitch: option.pitch,
-                startTime: timePosition,
-                duration: selectedDuration,
-                durationComponents: components,
-                preferredString: stringIndex,
-              });
-            }
-          }
-        }
-        // For melody context (not chord), don't create new notes
+        // IMPORTANT: Never create new notes from tablature selection
+        // Tablature only controls how existing notes are played
+        // For chord notes: they are generated from chords, not stored as individual notes
+        // Therefore, chord tablature voicings cannot be changed via this interface
       }
     }
 
@@ -1774,50 +1747,9 @@ export function PianoRoll() {
                       const color = NOTE_COLORS[pos.note.replace('#', '').replace('b', '')] || chordInfo.color;
                       const markerY = STRING_POSITIONS[pos.string] - 15;
 
-                      const handleChordMarkerClick = (e: React.MouseEvent) => {
-                        if (!isEditMode) return;
-                        e.stopPropagation();
-
-                        // Get all pitches available at this time (chord notes + melody notes)
-                        const availablePitches = getAllPitchesAtTime(chord.startTime, song.notes, song.chords, song.key);
-
-                        // Find which pitches can be played on this string
-                        const options: NoteOption[] = [];
-
-                        // Always add empty note option
-                        options.push({
-                          pitch: null,
-                          fret: -1,
-                          noteName: ''
-                        });
-
-                        // Add all playable pitches on this string
-                        availablePitches.forEach(pitch => {
-                          const position = findFretPositionOnString(pitch, pos.string);
-                          if (position) {
-                            const noteName = pitch.slice(0, -1);
-                            options.push({
-                              pitch: pitch,
-                              fret: position.fret,
-                              noteName: noteName
-                            });
-                          }
-                        });
-
-                        const rect = (e.target as HTMLElement).getBoundingClientRect();
-                        const containerRect = containerRef.current?.getBoundingClientRect();
-                        if (containerRect) {
-                          setSelectorState({
-                            visible: true,
-                            x: rect.left - containerRect.left,
-                            y: rect.top - containerRect.top,
-                            stringIndex: pos.string,
-                            options: options,
-                            timePosition: chord.startTime,
-                            isChordContext: true // This is from a chord marker
-                          });
-                        }
-                      };
+                      // Chord markers are not clickable in edit mode
+                      // Chord voicings are determined by the chord algorithm, not user preference
+                      // Only melody notes can have their tablature display customized
 
                       return (
                         <TablatureFretMarker
@@ -1828,7 +1760,6 @@ export function PianoRoll() {
                             left: `${markerX}px`,
                             top: `${markerY}px`,
                           }}
-                          onClick={handleChordMarkerClick}
                         >
                           {pos.fret === 0 ? 'O' : pos.fret}
                         </TablatureFretMarker>
