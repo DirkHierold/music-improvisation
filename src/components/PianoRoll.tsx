@@ -472,11 +472,11 @@ export function calculateUkuleleNotes(notes: Note[], chords: Chord[], key: strin
   chords.forEach(chord => {
     const chordNotes = getChordNotes(chord.roman, key);
     const chordStart = chord.startTime;
-    const chordEnd = chord.startTime + chord.duration;
 
-    // Find overlapping melody notes
+    // Find melody notes that play AT THE SAME TIME as chord start
+    // (not all notes during the entire chord duration)
     const overlappingNotes = notes.filter(
-      n => n.startTime < chordEnd && n.startTime + n.duration > chordStart
+      n => n.startTime === chordStart
     );
 
     let maxMelodyNoteOrder = -1;
@@ -1661,15 +1661,15 @@ export function PianoRoll() {
                     const chordInfo = getChordInfo(chord.roman, song.key);
 
                     const chordStart = chord.startTime;
-                    const chordEnd = chord.startTime + chord.duration;
 
                     const visibleStart = Math.max(chordStart, rowStartBeat);
 
                     const relativeStart = visibleStart - rowStartBeat;
 
-                    // Find all melody notes at this time
+                    // Find melody notes that play AT THE SAME TIME as chord start
+                    // (not all notes during the entire chord duration)
                     const overlappingNotes = song.notes.filter(
-                      n => n.startTime < chordEnd && n.startTime + n.duration > chordStart
+                      n => n.startTime === chordStart
                     );
 
                     const chromatic = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
