@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { useStore } from '../store';
 import { MAJOR_SCALES, CHROMATIC_NOTES, NOTE_COLORS, NoteDuration, getChordInfo, getChordNotes, durationToComponents, Note, Chord } from '../types';
 import { audioEngine } from '../services/AudioEngine';
+import { NoteRondel, NoteOption } from './NoteRondel';
 
 const Container = styled.div`
   flex: 1;
@@ -259,6 +260,7 @@ const TablatureString = styled.div<{ $stringIndex: number }>`
   z-index: 1;
 `;
 
+
 const TablatureFretMarker = styled.div<{ $color: string; $selected: boolean }>`
   position: absolute;
   width: 30px;
@@ -278,6 +280,31 @@ const TablatureFretMarker = styled.div<{ $color: string; $selected: boolean }>`
 
   &:hover {
     opacity: 0.9;
+  }
+`;
+
+const EmptyNotePlaceholder = styled.div`
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: transparent;
+  border: 1px dashed rgba(200, 200, 200, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(200, 200, 200, 0.4);
+  font-weight: normal;
+  font-size: 10px;
+  box-sizing: border-box;
+  z-index: 9;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    border-color: rgba(200, 200, 200, 0.6);
+    background-color: rgba(200, 200, 200, 0.1);
+    transform: scale(1.2);
   }
 `;
 
@@ -371,6 +398,38 @@ function findFretPositionOnString(targetPitch: string, stringIndex: number): { s
     }
   }
   return null;
+}
+
+// Get all unique pitches (melody + chord notes) at a given time
+function getAllPitchesAtTime(timePosition: number, notes: Note[], chords: Chord[], key: string): string[] {
+  const pitches = new Set<string>();
+
+  // Add melody notes at this time
+  notes.forEach(note => {
+    if (note.startTime <= timePosition && note.startTime + note.duration > timePosition) {
+      pitches.add(note.pitch);
+    }
+  });
+
+  // Add chord notes at this time
+  chords.forEach(chord => {
+    if (chord.startTime <= timePosition && chord.startTime + chord.duration > timePosition) {
+      const chordNotes = getChordNotes(chord.roman, key);
+      // We need to find the actual pitches used in the ukulele rendering
+      // For simplicity, we'll check octaves 3-5 for each chord note
+      chordNotes.forEach(noteName => {
+        for (let octave = 3; octave <= 5; octave++) {
+          const pitch = `${noteName}${octave}`;
+          // Check if this pitch is playable on ukulele
+          if (findBestFretPosition(pitch)) {
+            pitches.add(pitch);
+          }
+        }
+      });
+    }
+  });
+
+  return Array.from(pitches);
 }
 
 // Get the highest playable pitch on ukulele (A-string, 12th fret)
@@ -563,7 +622,7 @@ function isWithinUkuleleRange(pitch: string): boolean {
 }
 
 export function PianoRoll() {
-  const { song, isChromatic, selectedDuration, currentBeat, cursorPosition, isPlaying, addNote, updateNote, deleteNote, selectedNoteId, setSelectedNoteId, setSelectedDuration, setCursorPosition, selectedChordId, setSelectedChordId, updateChord, deleteChord } = useStore();
+  const { song, isChromatic, selectedDuration, currentBeat, cursorPosition, isPlaying, addNote, updateNote, deleteNote, selectedNoteId, setSelectedNoteId, setSelectedDuration, setCursorPosition, selectedChordId, setSelectedChordId, updateChord, deleteChord, isEditMode } = useStore();
 
   // Extract key explicitly for better React dependency tracking
   const currentKey = song.key;
@@ -573,6 +632,16 @@ export function PianoRoll() {
   const [resizingChord, setResizingChord] = useState<string | null>(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0, startTime: 0, pitch: '' });
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Note selector state
+  const [selectorState, setSelectorState] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    stringIndex: number;
+    options: NoteOption[];
+    timePosition: number;
+  } | null>(null);
 
   // Calculate base octave and notes based on the key, memoized to react to key changes
   const baseNotes = useMemo(() => {
@@ -1259,6 +1328,115 @@ export function PianoRoll() {
 
   const displayPosition = isPlaying ? currentBeat : cursorPosition;
 
+  const handleSelectorSelect = (option: NoteOption) => {
+    if (!selectorState) return;
+
+    const { stringIndex, timePosition } = selectorState;
+
+    if (option.pitch === null) {
+      // Empty note selected - set preferredString to -1 to hide from tablature
+      // This keeps the melody note in piano roll but removes it from tablature display
+      const noteOnThisString = song.notes.find(n => {
+        if (n.startTime !== timePosition) return false;
+
+        // Check if this note is currently shown on this string
+        if (n.preferredString === stringIndex) {
+          return true;
+        }
+
+        // Or if it has no preference but would default to this string
+        if (n.preferredString === undefined) {
+          const defaultPosition = findBestFretPosition(n.pitch);
+          return defaultPosition && defaultPosition.string === stringIndex;
+        }
+
+        return false;
+      });
+
+      if (noteOnThisString) {
+        // Set preferredString to -1 to indicate "don't show in tablature"
+        // The note itself stays in the piano roll
+        updateNote(noteOnThisString.id, { preferredString: -1 });
+      }
+    } else {
+      // Find if there's already a note at this time position with this pitch
+      const existingNote = song.notes.find(n => n.startTime === timePosition && n.pitch === option.pitch);
+
+      if (existingNote) {
+        // IMPORTANT: We need to handle the case where we're moving an existing note
+        // to a string that currently has a different note
+
+        // First, find what's currently on the target string
+        const noteOnTargetString = song.notes.find(n => {
+          if (n.startTime !== timePosition || n.id === existingNote.id) return false;
+
+          const noteString = n.preferredString !== undefined && n.preferredString >= 0
+            ? n.preferredString
+            : findBestFretPosition(n.pitch)?.string;
+
+          return noteString === stringIndex;
+        });
+
+        // We need to update both notes in sequence
+        // Use setTimeout to ensure the first update completes before the second
+        if (noteOnTargetString) {
+          updateNote(noteOnTargetString.id, { preferredString: -1 });
+          // Small delay to ensure the first update is processed
+          setTimeout(() => {
+            updateNote(existingNote.id, { preferredString: stringIndex });
+          }, 0);
+        } else {
+          updateNote(existingNote.id, { preferredString: stringIndex });
+        }
+      } else {
+        // No existing note with this pitch, create a new one
+        // But first check if there's a different note on this string at this time
+        const noteOnTargetString = song.notes.find(n => {
+          if (n.startTime !== timePosition) return false;
+
+          const noteString = n.preferredString !== undefined && n.preferredString >= 0
+            ? n.preferredString
+            : findBestFretPosition(n.pitch)?.string;
+
+          return noteString === stringIndex;
+        });
+
+        // If there's a note on the target string, hide it
+        if (noteOnTargetString) {
+          updateNote(noteOnTargetString.id, { preferredString: -1 });
+          // Small delay before creating new note
+          setTimeout(() => {
+            if (option.pitch) {
+              const components = durationToComponents(selectedDuration);
+              addNote({
+                pitch: option.pitch,
+                startTime: timePosition,
+                duration: selectedDuration,
+                durationComponents: components,
+                preferredString: stringIndex,
+              });
+            }
+          }, 0);
+        } else {
+          const components = durationToComponents(selectedDuration);
+          addNote({
+            pitch: option.pitch,
+            startTime: timePosition,
+            duration: selectedDuration,
+            durationComponents: components,
+            preferredString: stringIndex,
+          });
+        }
+      }
+    }
+
+    setSelectorState(null);
+  };
+
+  const handleSelectorClose = () => {
+    setSelectorState(null);
+  };
+
   return (
     <Container ref={containerRef}>
       {Array.from({ length: totalRows }).map((_, rowIndex) => {
@@ -1615,17 +1793,30 @@ export function PianoRoll() {
                 {/* Render notes on tablature LAST (so they appear on top) */}
                 {song.notes
                   .filter(note => {
+                    // Don't show notes that are explicitly hidden from tablature
+                    if (note.preferredString === -1) return false;
+
                     // Filter by row visibility
                     const inRow = (note.startTime >= rowStartBeat && note.startTime < rowEndBeat) ||
                       (note.startTime < rowStartBeat && note.startTime + note.duration > rowStartBeat);
 
                     // Check if note is playable on ukulele (within 12-fret range)
                     if (!inRow) return false;
+
+                    // Check if note has a preferred string
+                    if (note.preferredString !== undefined && note.preferredString >= 0) {
+                      const position = findFretPositionOnString(note.pitch, note.preferredString);
+                      return position !== null;
+                    }
+
                     const position = findBestFretPosition(note.pitch);
                     return position !== null;
                   })
                   .map(note => {
-                    const position = findBestFretPosition(note.pitch);
+                    // Use preferred string if available, otherwise use best position
+                    const position = note.preferredString !== undefined && note.preferredString >= 0
+                      ? findFretPositionOnString(note.pitch, note.preferredString)
+                      : findBestFretPosition(note.pitch);
                     if (!position) return null;
 
                     const noteName = note.pitch.replace(/\d+/, '');
@@ -1641,6 +1832,50 @@ export function PianoRoll() {
                     const markerX = relativeStart * 60 - 15;
                     const markerY = STRING_POSITIONS[position.string] - 15;
 
+                    const handleMarkerClick = (e: React.MouseEvent) => {
+                      if (!isEditMode) return;
+                      e.stopPropagation();
+
+                      // Get all pitches available at this time (including hidden notes)
+                      const availablePitches = getAllPitchesAtTime(note.startTime, song.notes, song.chords, song.key);
+
+                      // Find which pitches can be played on this string
+                      const options: NoteOption[] = [];
+
+                      // Always add empty note option
+                      options.push({
+                        pitch: null,
+                        fret: -1,
+                        noteName: ''
+                      });
+
+                      // Add all playable pitches on this string
+                      availablePitches.forEach(pitch => {
+                        const pos = findFretPositionOnString(pitch, position.string);
+                        if (pos) {
+                          const noteName = pitch.slice(0, -1);
+                          options.push({
+                            pitch: pitch,
+                            fret: pos.fret,
+                            noteName: noteName
+                          });
+                        }
+                      });
+
+                      const rect = (e.target as HTMLElement).getBoundingClientRect();
+                      const containerRect = containerRef.current?.getBoundingClientRect();
+                      if (containerRect) {
+                        setSelectorState({
+                          visible: true,
+                          x: rect.left - containerRect.left,
+                          y: rect.top - containerRect.top,
+                          stringIndex: position.string,
+                          options: options,
+                          timePosition: note.startTime
+                        });
+                      }
+                    };
+
                     return (
                       <TablatureFretMarker
                         key={`${note.id}-${rowIndex}`}
@@ -1650,16 +1885,125 @@ export function PianoRoll() {
                           left: `${markerX}px`,
                           top: `${markerY}px`,
                         }}
+                        onClick={handleMarkerClick}
                       >
                         {position.fret === 0 ? 'O' : position.fret}
                       </TablatureFretMarker>
                     );
                   })}
+                {/* Render empty note placeholders */}
+                {isEditMode && (() => {
+                  const placeholders: React.ReactElement[] = [];
+
+                  // For each beat in this row
+                  for (let beatIndex = 0; beatIndex < beatsPerRow; beatIndex++) {
+                    const absoluteBeat = rowStartBeat + beatIndex;
+
+                    // For each string
+                    for (let stringIndex = 0; stringIndex < UKULELE_TUNING.length; stringIndex++) {
+                      // Check if there's already a note at this position
+                      const hasNote = song.notes.some(note => {
+                        if (Math.floor(note.startTime) !== absoluteBeat) return false;
+
+                        // Skip notes that are hidden from tablature
+                        if (note.preferredString === -1) return false;
+
+                        const notePosition = note.preferredString !== undefined && note.preferredString >= 0
+                          ? findFretPositionOnString(note.pitch, note.preferredString)
+                          : findBestFretPosition(note.pitch);
+
+                        return notePosition && notePosition.string === stringIndex;
+                      });
+
+                      // Check if there's a chord note at this position
+                      const hasChordNote = song.chords.some(chord => {
+                        if (Math.floor(chord.startTime) !== absoluteBeat) return false;
+
+                        const chordShape = getUkuleleChordShape(chord.roman, song.key);
+
+                        // Check if this string has a chord note
+                        return chordShape[stringIndex] !== undefined;
+                      });
+
+                      // Only show placeholder if no note and no chord note
+                      if (!hasNote && !hasChordNote) {
+                        const placeholderX = beatIndex * 60 - 8;
+                        const placeholderY = STRING_POSITIONS[stringIndex] - 8;
+
+                        placeholders.push(
+                          <EmptyNotePlaceholder
+                            key={`empty-${absoluteBeat}-${stringIndex}`}
+                            style={{
+                              left: `${placeholderX}px`,
+                              top: `${placeholderY}px`,
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+
+                              // Get all pitches available at this time
+                              const availablePitches = getAllPitchesAtTime(absoluteBeat, song.notes, song.chords, song.key);
+
+                              // Find which pitches can be played on this string
+                              const options: NoteOption[] = [];
+
+                              // Always add empty note option
+                              options.push({
+                                pitch: null,
+                                fret: -1,
+                                noteName: ''
+                              });
+
+                              // Add all playable pitches on this string
+                              availablePitches.forEach(pitch => {
+                                const pos = findFretPositionOnString(pitch, stringIndex);
+                                if (pos) {
+                                  const noteName = pitch.slice(0, -1);
+                                  options.push({
+                                    pitch: pitch,
+                                    fret: pos.fret,
+                                    noteName: noteName
+                                  });
+                                }
+                              });
+
+                              const rect = (e.target as HTMLElement).getBoundingClientRect();
+                              const containerRect = containerRef.current?.getBoundingClientRect();
+                              if (containerRect) {
+                                setSelectorState({
+                                  visible: true,
+                                  x: rect.left - containerRect.left,
+                                  y: rect.top - containerRect.top,
+                                  stringIndex: stringIndex,
+                                  options: options,
+                                  timePosition: absoluteBeat
+                                });
+                              }
+                            }}
+                          >
+                            ·
+                          </EmptyNotePlaceholder>
+                        );
+                      }
+                    }
+                  }
+
+                  return placeholders;
+                })()}
               </TablatureTimeline>
             </TablatureRow>
           </Grid>
         );
       })}
+      {selectorState && selectorState.visible && (
+        <NoteRondel
+          x={selectorState.x}
+          y={selectorState.y}
+          stringIndex={selectorState.stringIndex}
+          options={selectorState.options}
+          onSelect={handleSelectorSelect}
+          onClose={handleSelectorClose}
+        />
+      )}
     </Container>
   );
 }
