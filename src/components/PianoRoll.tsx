@@ -1465,16 +1465,23 @@ export function PianoRoll() {
           if (activeChord) {
             // There's a chord - user wants to show a chord note on this string
             // First, hide any melody note currently on this string
-            const noteOnThisString = song.notes.find(n => {
-              if (n.startTime !== timePosition) return false;
-              const noteString = n.preferredString !== undefined && n.preferredString >= 0
-                ? n.preferredString
-                : findBestFretPosition(n.pitch)?.string;
-              return noteString === stringIndex;
-            });
 
-            if (noteOnThisString) {
-              updateNote(noteOnThisString.id, { preferredString: -1 });
+            // If we have the clicked note ID, use it directly
+            if (clickedNoteId) {
+              updateNote(clickedNoteId, { preferredString: -1 });
+            } else {
+              // Fallback: search for the note
+              const noteOnThisString = song.notes.find(n => {
+                if (n.startTime !== timePosition) return false;
+                const noteString = n.preferredString !== undefined && n.preferredString >= 0
+                  ? n.preferredString
+                  : findBestFretPosition(n.pitch)?.string;
+                return noteString === stringIndex;
+              });
+
+              if (noteOnThisString) {
+                updateNote(noteOnThisString.id, { preferredString: -1 });
+              }
             }
 
             // Now set the chord preference for this string
