@@ -1645,8 +1645,8 @@ export function PianoRoll() {
                 {/* Render chords on tablature FIRST */}
                 {song.chords
                   .filter(chord =>
-                    (chord.startTime >= rowStartBeat && chord.startTime < rowEndBeat) ||
-                    (chord.startTime < rowStartBeat && chord.startTime + chord.duration > rowStartBeat)
+                    // Only show chords that START in this row (not chords that extend from previous row)
+                    chord.startTime >= rowStartBeat && chord.startTime < rowEndBeat
                   )
                   .map(chord => {
                     const chordNotes = getChordNotes(chord.roman, song.key);
@@ -1921,9 +1921,9 @@ export function PianoRoll() {
                     // Don't show notes that are explicitly hidden from tablature
                     if (note.preferredString === -1) return false;
 
-                    // Filter by row visibility
-                    const inRow = (note.startTime >= rowStartBeat && note.startTime < rowEndBeat) ||
-                      (note.startTime < rowStartBeat && note.startTime + note.duration > rowStartBeat);
+                    // Filter by row visibility - only show notes that START in this row
+                    // (not notes that started earlier and extend into this row)
+                    const inRow = note.startTime >= rowStartBeat && note.startTime < rowEndBeat;
 
                     // Check if note is playable on ukulele (within 12-fret range)
                     if (!inRow) return false;
