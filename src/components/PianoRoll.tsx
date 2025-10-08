@@ -1639,27 +1639,8 @@ export function PianoRoll() {
                     // Try to find fret positions for chord notes
                     let chordPositions: Array<{ string: number; fret: number; note: string; pitch: string }> = [];
 
-                    // Check if user has set tablature preferences for this chord
-                    if (chord.tablaturePreferences) {
-                      // Use user-defined preferences
-                      Object.entries(chord.tablaturePreferences).forEach(([stringIndexStr, pitch]) => {
-                        const stringIndex = parseInt(stringIndexStr);
-
-                        // null means hide this string
-                        if (pitch === null) return;
-
-                        const position = findFretPositionOnString(pitch, stringIndex);
-                        if (position) {
-                          const noteName = pitch.replace(/\d+/, '').replace(/b/g, '#');
-                          chordPositions.push({
-                            string: stringIndex,
-                            fret: position.fret,
-                            note: noteName,
-                            pitch: pitch
-                          });
-                        }
-                      });
-                    } else if (overlappingNotes.length === 0) {
+                    // STEP 1: Calculate automatic chord positions
+                    if (overlappingNotes.length === 0) {
                       // If no melody notes overlap, use standard ukulele chord shape
                       const chordShape = getUkuleleChordShape(chord.roman, song.key);
 
@@ -1773,6 +1754,34 @@ export function PianoRoll() {
                         // Re-sort after adding gap fillers
                         chordPositions.sort((a, b) => a.string - b.string);
                       }
+                    }
+
+                    // STEP 2: Apply user tablature preferences (overrides automatic calculation)
+                    if (chord.tablaturePreferences) {
+                      Object.entries(chord.tablaturePreferences).forEach(([stringIndexStr, pitch]) => {
+                        const stringIndex = parseInt(stringIndexStr);
+
+                        // Remove any existing position for this string
+                        chordPositions = chordPositions.filter(p => p.string !== stringIndex);
+
+                        // If pitch is null, leave this string empty (already removed above)
+                        if (pitch === null) return;
+
+                        // Add the user's preferred pitch for this string
+                        const position = findFretPositionOnString(pitch, stringIndex);
+                        if (position) {
+                          const noteName = pitch.replace(/\d+/, '').replace(/b/g, '#');
+                          chordPositions.push({
+                            string: stringIndex,
+                            fret: position.fret,
+                            note: noteName,
+                            pitch: pitch
+                          });
+                        }
+                      });
+
+                      // Re-sort after applying preferences
+                      chordPositions.sort((a, b) => a.string - b.string);
                     }
 
                     // Position the markers at the start of the chord (left edge)
