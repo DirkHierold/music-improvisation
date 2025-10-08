@@ -1818,12 +1818,17 @@ export function PianoRoll() {
                           }
                         });
 
+                        // Sort by fret number (ascending), but keep empty note first
+                        const emptyOption = options[0];
+                        const noteOptions = options.slice(1).sort((a, b) => a.fret - b.fret);
+                        const sortedOptions = [emptyOption, ...noteOptions];
+
                         setSelectorState({
                           visible: true,
                           x: rect.left - containerRect.left,
                           y: rect.top - containerRect.top,
                           stringIndex: pos.string,
-                          options: options,
+                          options: sortedOptions,
                           timePosition: chordStart,
                           isChordContext: true
                         });
@@ -1917,6 +1922,11 @@ export function PianoRoll() {
                         }
                       });
 
+                      // Sort by fret number (ascending), but keep empty note first
+                      const emptyOption = options[0];
+                      const noteOptions = options.slice(1).sort((a, b) => a.fret - b.fret);
+                      const sortedOptions = [emptyOption, ...noteOptions];
+
                       const rect = (e.target as HTMLElement).getBoundingClientRect();
                       const containerRect = containerRef.current?.getBoundingClientRect();
                       if (containerRect) {
@@ -1925,7 +1935,7 @@ export function PianoRoll() {
                           x: rect.left - containerRect.left,
                           y: rect.top - containerRect.top,
                           stringIndex: position.string,
-                          options: options,
+                          options: sortedOptions,
                           timePosition: note.startTime,
                           isChordContext: false // This is from a melody note
                         });
@@ -2039,6 +2049,11 @@ export function PianoRoll() {
                                 }
                               });
 
+                              // Sort by fret number (ascending), but keep empty note first
+                              const emptyOption = options[0];
+                              const noteOptions = options.slice(1).sort((a, b) => a.fret - b.fret);
+                              const sortedOptions = [emptyOption, ...noteOptions];
+
                               const rect = (e.target as HTMLElement).getBoundingClientRect();
                               const containerRect = containerRef.current?.getBoundingClientRect();
                               if (containerRect) {
@@ -2047,7 +2062,7 @@ export function PianoRoll() {
                                   x: rect.left - containerRect.left,
                                   y: rect.top - containerRect.top,
                                   stringIndex: stringIndex,
-                                  options: options,
+                                  options: sortedOptions,
                                   timePosition: absoluteBeat,
                                   isChordContext: !!activeChord // Chord context if a chord is active
                                 });
