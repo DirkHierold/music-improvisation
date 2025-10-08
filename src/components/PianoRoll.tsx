@@ -678,6 +678,7 @@ export function PianoRoll() {
     options: NoteOption[];
     timePosition: number;
     isChordContext: boolean; // true if clicked on chord marker, false if melody note
+    clickedNoteId?: string; // ID of the specific note that was clicked (for melody notes)
   } | null>(null);
 
   // Calculate base octave and notes based on the key, memoized to react to key changes
@@ -1368,7 +1369,7 @@ export function PianoRoll() {
   const handleSelectorSelect = (option: NoteOption) => {
     if (!selectorState) return;
 
-    const { stringIndex, timePosition, isChordContext } = selectorState;
+    const { stringIndex, timePosition, isChordContext, clickedNoteId } = selectorState;
 
     if (isChordContext) {
       // CHORD CONTEXT: Update tablature preferences only, never touch Piano Roll
@@ -1396,27 +1397,34 @@ export function PianoRoll() {
       if (option.pitch === null) {
         // Empty note selected - set preferredString to -1 to hide from tablature
         // This keeps the melody note in piano roll but removes it from tablature display
-        const noteOnThisString = song.notes.find(n => {
-          if (n.startTime !== timePosition) return false; // Must be at this exact time
 
-          // Check if this note is currently shown on this string
-          if (n.preferredString === stringIndex) {
-            return true;
+        // If we have the clicked note ID, use it directly
+        if (clickedNoteId) {
+          updateNote(clickedNoteId, { preferredString: -1 });
+        } else {
+          // Fallback: search for the note (old logic)
+          const noteOnThisString = song.notes.find(n => {
+            if (n.startTime !== timePosition) return false; // Must be at this exact time
+
+            // Check if this note is currently shown on this string
+            if (n.preferredString === stringIndex) {
+              return true;
+            }
+
+            // Or if it has no preference but would default to this string
+            if (n.preferredString === undefined) {
+              const defaultPosition = findBestFretPosition(n.pitch);
+              return defaultPosition && defaultPosition.string === stringIndex;
+            }
+
+            return false;
+          });
+
+          if (noteOnThisString) {
+            // Set preferredString to -1 to indicate "don't show in tablature"
+            // The note itself stays in the piano roll
+            updateNote(noteOnThisString.id, { preferredString: -1 });
           }
-
-          // Or if it has no preference but would default to this string
-          if (n.preferredString === undefined) {
-            const defaultPosition = findBestFretPosition(n.pitch);
-            return defaultPosition && defaultPosition.string === stringIndex;
-          }
-
-          return false;
-        });
-
-        if (noteOnThisString) {
-          // Set preferredString to -1 to indicate "don't show in tablature"
-          // The note itself stays in the piano roll
-          updateNote(noteOnThisString.id, { preferredString: -1 });
         }
       } else {
         // Find if there's already a note at this time position with this pitch
@@ -2005,7 +2013,8 @@ export function PianoRoll() {
                           stringIndex: position.string,
                           options: sortedOptions,
                           timePosition: note.startTime,
-                          isChordContext: false // This is from a melody note
+                          isChordContext: false, // This is from a melody note
+                          clickedNoteId: note.id // Track which specific note was clicked
                         });
                       }
                     };
