@@ -1334,38 +1334,59 @@ export function PianoRoll() {
 
     const { stringIndex, timePosition, isChordContext } = selectorState;
 
-    if (option.pitch === null) {
-      // Empty note selected - set preferredString to -1 to hide from tablature
-      // This keeps the melody note in piano roll but removes it from tablature display
-      const noteOnThisString = song.notes.find(n => {
-        if (n.startTime !== timePosition) return false;
+    if (isChordContext) {
+      // CHORD CONTEXT: Update tablature preferences only, never touch Piano Roll
+      const chord = song.chords.find(c =>
+        c.startTime <= timePosition &&
+        c.startTime + c.duration > timePosition
+      );
 
-        // Check if this note is currently shown on this string
-        if (n.preferredString === stringIndex) {
-          return true;
+      if (chord) {
+        const currentPrefs = chord.tablaturePreferences || {};
+        const newPrefs = { ...currentPrefs };
+
+        if (option.pitch === null) {
+          // Hide this string in chord tablature
+          newPrefs[stringIndex] = null;
+        } else {
+          // Show this pitch on this string
+          newPrefs[stringIndex] = option.pitch;
         }
 
-        // Or if it has no preference but would default to this string
-        if (n.preferredString === undefined) {
-          const defaultPosition = findBestFretPosition(n.pitch);
-          return defaultPosition && defaultPosition.string === stringIndex;
-        }
-
-        return false;
-      });
-
-      if (noteOnThisString) {
-        // Set preferredString to -1 to indicate "don't show in tablature"
-        // The note itself stays in the piano roll
-        updateNote(noteOnThisString.id, { preferredString: -1 });
+        updateChord(chord.id, { tablaturePreferences: newPrefs });
       }
     } else {
-      // Find if there's already a note at this time position with this pitch
-      const existingNote = song.notes.find(n => n.startTime === timePosition && n.pitch === option.pitch);
+      // MELODY NOTE CONTEXT: Update preferredString for melody notes
+      if (option.pitch === null) {
+        // Empty note selected - set preferredString to -1 to hide from tablature
+        // This keeps the melody note in piano roll but removes it from tablature display
+        const noteOnThisString = song.notes.find(n => {
+          if (n.startTime !== timePosition) return false;
 
-      if (existingNote) {
-        // IMPORTANT: Only do swapping for melody notes, not for chord context
-        if (!isChordContext) {
+          // Check if this note is currently shown on this string
+          if (n.preferredString === stringIndex) {
+            return true;
+          }
+
+          // Or if it has no preference but would default to this string
+          if (n.preferredString === undefined) {
+            const defaultPosition = findBestFretPosition(n.pitch);
+            return defaultPosition && defaultPosition.string === stringIndex;
+          }
+
+          return false;
+        });
+
+        if (noteOnThisString) {
+          // Set preferredString to -1 to indicate "don't show in tablature"
+          // The note itself stays in the piano roll
+          updateNote(noteOnThisString.id, { preferredString: -1 });
+        }
+      } else {
+        // Find if there's already a note at this time position with this pitch
+        const existingNote = song.notes.find(n => n.startTime === timePosition && n.pitch === option.pitch);
+
+        if (existingNote) {
           // Melody note context - swap notes between strings
           // First, find what's currently on the target string
           const noteOnTargetString = song.notes.find(n => {
@@ -1390,15 +1411,9 @@ export function PianoRoll() {
             updateNote(existingNote.id, { preferredString: stringIndex });
           }
         } else {
-          // Chord context - just update this note, don't affect others
-          updateNote(existingNote.id, { preferredString: stringIndex });
+          // No existing melody note with this pitch
+          // Don't create new notes from tablature
         }
-      } else {
-        // No existing melody note with this pitch at this time
-        // IMPORTANT: Never create new notes from tablature selection
-        // Tablature only controls how existing notes are played
-        // For chord notes: they are generated from chords, not stored as individual notes
-        // Therefore, chord tablature voicings cannot be changed via this interface
       }
     }
 
@@ -1624,8 +1639,28 @@ export function PianoRoll() {
                     // Try to find fret positions for chord notes
                     let chordPositions: Array<{ string: number; fret: number; note: string; pitch: string }> = [];
 
-                    // If no melody notes overlap, use standard ukulele chord shape
-                    if (overlappingNotes.length === 0) {
+                    // Check if user has set tablature preferences for this chord
+                    if (chord.tablaturePreferences) {
+                      // Use user-defined preferences
+                      Object.entries(chord.tablaturePreferences).forEach(([stringIndexStr, pitch]) => {
+                        const stringIndex = parseInt(stringIndexStr);
+
+                        // null means hide this string
+                        if (pitch === null) return;
+
+                        const position = findFretPositionOnString(pitch, stringIndex);
+                        if (position) {
+                          const noteName = pitch.replace(/\d+/, '').replace(/b/g, '#');
+                          chordPositions.push({
+                            string: stringIndex,
+                            fret: position.fret,
+                            note: noteName,
+                            pitch: pitch
+                          });
+                        }
+                      });
+                    } else if (overlappingNotes.length === 0) {
+                      // If no melody notes overlap, use standard ukulele chord shape
                       const chordShape = getUkuleleChordShape(chord.roman, song.key);
 
                       chordShape.forEach((fret, stringIndex) => {
@@ -1747,9 +1782,43 @@ export function PianoRoll() {
                       const color = NOTE_COLORS[pos.note.replace('#', '').replace('b', '')] || chordInfo.color;
                       const markerY = STRING_POSITIONS[pos.string] - 15;
 
-                      // Chord markers are not clickable in edit mode
-                      // Chord voicings are determined by the chord algorithm, not user preference
-                      // Only melody notes can have their tablature display customized
+                      const handleChordMarkerClick = (e: React.MouseEvent) => {
+                        if (!isEditMode) return;
+                        e.stopPropagation();
+
+                        const rect = (e.target as HTMLElement).getBoundingClientRect();
+                        const containerRect = containerRef.current?.getBoundingClientRect();
+                        if (!containerRect) return;
+
+                        // Get all pitches available at this time
+                        const availablePitches = getAllPitchesAtTime(chordStart, song.notes, song.chords, song.key);
+                        const options: NoteOption[] = [];
+
+                        // Always add empty option first
+                        options.push({ pitch: null, fret: -1, noteName: '' });
+
+                        // Add all pitches that can be played on this string
+                        availablePitches.forEach(pitch => {
+                          const position = findFretPositionOnString(pitch, pos.string);
+                          if (position) {
+                            options.push({
+                              pitch: pitch,
+                              fret: position.fret,
+                              noteName: pitch.slice(0, -1)
+                            });
+                          }
+                        });
+
+                        setSelectorState({
+                          visible: true,
+                          x: rect.left - containerRect.left,
+                          y: rect.top - containerRect.top,
+                          stringIndex: pos.string,
+                          options: options,
+                          timePosition: chordStart,
+                          isChordContext: true
+                        });
+                      };
 
                       return (
                         <TablatureFretMarker
@@ -1760,6 +1829,7 @@ export function PianoRoll() {
                             left: `${markerX}px`,
                             top: `${markerY}px`,
                           }}
+                          onClick={handleChordMarkerClick}
                         >
                           {pos.fret === 0 ? 'O' : pos.fret}
                         </TablatureFretMarker>

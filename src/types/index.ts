@@ -13,6 +13,9 @@ export interface Chord {
   startTime: number;
   duration: number;
   durationComponents?: NoteDuration[]; // Array of duration values that sum to duration
+  tablaturePreferences?: {
+    [stringIndex: number]: string | null; // pitch to show on this string, or null to hide
+  };
 }
 
 export interface Meter {
