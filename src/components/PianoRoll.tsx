@@ -1455,41 +1455,10 @@ export function PianoRoll() {
             updateNote(existingNote.id, { preferredString: stringIndex });
           }
         } else {
-          // No existing melody note with this pitch
-          // Check if there's an active chord at this time that we can modify
-          const activeChord = song.chords.find(c =>
-            c.startTime <= timePosition &&
-            c.startTime + c.duration > timePosition
-          );
-
-          if (activeChord) {
-            // There's a chord - user wants to show a chord note on this string
-            // First, hide any melody note currently on this string
-
-            // If we have the clicked note ID, use it directly
-            if (clickedNoteId) {
-              updateNote(clickedNoteId, { preferredString: -1 });
-            } else {
-              // Fallback: search for the note
-              const noteOnThisString = song.notes.find(n => {
-                if (n.startTime !== timePosition) return false;
-                const noteString = n.preferredString !== undefined && n.preferredString >= 0
-                  ? n.preferredString
-                  : findBestFretPosition(n.pitch)?.string;
-                return noteString === stringIndex;
-              });
-
-              if (noteOnThisString) {
-                updateNote(noteOnThisString.id, { preferredString: -1 });
-              }
-            }
-
-            // Now set the chord preference for this string
-            const currentPrefs = activeChord.tablaturePreferences || {};
-            const newPrefs = { ...currentPrefs, [stringIndex]: option.pitch };
-            updateChord(activeChord.id, { tablaturePreferences: newPrefs });
-          }
-          // Otherwise: don't create new notes from tablature
+          // No existing melody note with this pitch at this time
+          // When clicking on a melody note marker, we should NOT modify chord preferences
+          // because chord preferences affect the entire chord duration, not just this beat
+          // User can only change melody notes to other melody notes, or hide them
         }
       }
     }
