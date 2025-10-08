@@ -1397,7 +1397,7 @@ export function PianoRoll() {
         // Empty note selected - set preferredString to -1 to hide from tablature
         // This keeps the melody note in piano roll but removes it from tablature display
         const noteOnThisString = song.notes.find(n => {
-          if (n.startTime !== timePosition) return false;
+          if (n.startTime !== timePosition) return false; // Must be at this exact time
 
           // Check if this note is currently shown on this string
           if (n.preferredString === stringIndex) {
@@ -2051,7 +2051,10 @@ export function PianoRoll() {
 
                       // Check if there's a chord note at this position
                       const hasChordNote = song.chords.some(chord => {
-                        if (Math.floor(chord.startTime) !== absoluteBeat) return false;
+                        // Check if chord is active at this beat (not just starting)
+                        if (!(chord.startTime <= absoluteBeat && chord.startTime + chord.duration > absoluteBeat)) {
+                          return false;
+                        }
 
                         // If user explicitly hid this string via tablaturePreferences, no chord note here
                         if (chord.tablaturePreferences && chord.tablaturePreferences[stringIndex] === null) {
