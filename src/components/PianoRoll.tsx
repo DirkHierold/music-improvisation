@@ -1861,6 +1861,9 @@ export function PianoRoll() {
                         const containerRect = containerRef.current?.getBoundingClientRect();
                         if (!containerRect) return;
 
+                        // Account for container scroll offset
+                        const scrollTop = containerRef.current?.scrollTop || 0;
+
                         // Get all pitches available at this time
                         const availablePitches = getAllPitchesAtTime(chordStart, song.notes, song.chords, song.key);
                         const options: NoteOption[] = [];
@@ -1888,7 +1891,7 @@ export function PianoRoll() {
                         setSelectorState({
                           visible: true,
                           x: rect.left - containerRect.left,
-                          y: rect.top - containerRect.top,
+                          y: rect.top - containerRect.top + scrollTop,
                           stringIndex: pos.string,
                           options: sortedOptions,
                           timePosition: chordStart,
@@ -1992,10 +1995,13 @@ export function PianoRoll() {
                       const rect = (e.target as HTMLElement).getBoundingClientRect();
                       const containerRect = containerRef.current?.getBoundingClientRect();
                       if (containerRect) {
+                        // Account for container scroll offset
+                        const scrollTop = containerRef.current?.scrollTop || 0;
+
                         setSelectorState({
                           visible: true,
                           x: rect.left - containerRect.left,
-                          y: rect.top - containerRect.top,
+                          y: rect.top - containerRect.top + scrollTop,
                           stringIndex: position.string,
                           options: sortedOptions,
                           timePosition: note.startTime,
@@ -2119,10 +2125,13 @@ export function PianoRoll() {
                               const rect = (e.target as HTMLElement).getBoundingClientRect();
                               const containerRect = containerRef.current?.getBoundingClientRect();
                               if (containerRect) {
+                                // Account for container scroll offset
+                                const scrollTop = containerRef.current?.scrollTop || 0;
+
                                 setSelectorState({
                                   visible: true,
                                   x: rect.left - containerRect.left,
-                                  y: rect.top - containerRect.top,
+                                  y: rect.top - containerRect.top + scrollTop,
                                   stringIndex: stringIndex,
                                   options: sortedOptions,
                                   timePosition: absoluteBeat,
