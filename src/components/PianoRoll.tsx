@@ -1945,8 +1945,11 @@ export function PianoRoll() {
                       if (!isEditMode) return;
                       e.stopPropagation();
 
-                      // Get all pitches available at this time (including hidden notes)
-                      const availablePitches = getAllPitchesAtTime(note.startTime, song.notes, song.chords, song.key);
+                      // Get only melody note pitches at this time (not chord notes)
+                      // User can only change melody notes to other melody notes
+                      const availablePitches = song.notes
+                        .filter(n => n.startTime === note.startTime)
+                        .map(n => n.pitch);
 
                       // Find which pitches can be played on this string
                       const options: NoteOption[] = [];
@@ -2034,32 +2037,9 @@ export function PianoRoll() {
                         return notePosition && notePosition.string === stringIndex;
                       });
 
-                      // Check if there's a chord note at this position
-                      const hasChordNote = song.chords.some(chord => {
-                        // Check if chord is active at this beat (not just starting)
-                        if (!(chord.startTime <= absoluteBeat && chord.startTime + chord.duration > absoluteBeat)) {
-                          return false;
-                        }
-
-                        // If user explicitly hid this string via tablaturePreferences, no chord note here
-                        if (chord.tablaturePreferences && chord.tablaturePreferences[stringIndex] === null) {
-                          return false;
-                        }
-
-                        // If user set a specific pitch for this string, there IS a chord note
-                        if (chord.tablaturePreferences && chord.tablaturePreferences[stringIndex]) {
-                          return true;
-                        }
-
-                        // Otherwise, use automatic chord shape
-                        const chordShape = getUkuleleChordShape(chord.roman, song.key);
-
-                        // Check if this string has a chord note
-                        return chordShape[stringIndex] !== undefined;
-                      });
-
-                      // Only show placeholder if no note and no chord note
-                      if (!hasNote && !hasChordNote) {
+                      // Show placeholder if no visible note
+                      // Even if chord is active, show placeholder (user can click to add/change notes)
+                      if (!hasNote) {
                         const placeholderX = beatIndex * 60 - 8;
                         const placeholderY = STRING_POSITIONS[stringIndex] - 8;
 
