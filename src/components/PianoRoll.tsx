@@ -488,8 +488,9 @@ export function calculateUkuleleNotes(notes: Note[], chords: Chord[], key: strin
 
     let chordPositions: Array<{ string: number; fret: number; note: string; pitch: string }> = [];
 
-    // If no melody notes overlap, use standard chord shape
+    // STEP 1: Calculate automatic chord positions
     if (overlappingNotes.length === 0) {
+      // If no melody notes overlap, use standard chord shape
       const chordShape = getUkuleleChordShape(chord.roman, key);
       chordShape.forEach((fret, stringIndex) => {
         const pitch = getNoteFromFret(stringIndex, fret);
@@ -569,6 +570,31 @@ export function calculateUkuleleNotes(notes: Note[], chords: Chord[], key: strin
       }
     }
 
+    // STEP 2: Apply user tablature preferences (overrides automatic calculation)
+    if (chord.tablaturePreferences) {
+      Object.entries(chord.tablaturePreferences).forEach(([stringIndexStr, pitch]) => {
+        const stringIndex = parseInt(stringIndexStr);
+
+        // Remove any existing position for this string
+        chordPositions = chordPositions.filter(p => p.string !== stringIndex);
+
+        // If pitch is null, leave this string empty (already removed above)
+        if (pitch === null) return;
+
+        // Add the user's preferred pitch for this string
+        const position = findFretPositionOnString(pitch, stringIndex);
+        if (position) {
+          const noteName = pitch.replace(/\d+/, '').replace(/b/g, '#');
+          chordPositions.push({
+            string: stringIndex,
+            fret: position.fret,
+            note: noteName,
+            pitch: pitch
+          });
+        }
+      });
+    }
+
     // Add chord positions as ukulele notes
     chordPositions.forEach(pos => {
       const timeKey = `${chordStart}-${pos.pitch}-${pos.string}`;
@@ -586,7 +612,17 @@ export function calculateUkuleleNotes(notes: Note[], chords: Chord[], key: strin
 
   // Add melody notes
   notes.forEach(note => {
-    const position = findBestFretPosition(note.pitch);
+    // Skip notes that are explicitly hidden from tablature
+    if (note.preferredString === -1) return;
+
+    // Use preferred string if set, otherwise use automatic calculation
+    let position;
+    if (note.preferredString !== undefined && note.preferredString >= 0) {
+      position = findFretPositionOnString(note.pitch, note.preferredString);
+    } else {
+      position = findBestFretPosition(note.pitch);
+    }
+
     if (position) {
       const timeKey = `${note.startTime}-${note.pitch}-${position.string}`;
       if (!processedTimes.has(timeKey)) {
