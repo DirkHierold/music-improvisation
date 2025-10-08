@@ -1975,6 +1975,17 @@ export function PianoRoll() {
                       const hasChordNote = song.chords.some(chord => {
                         if (Math.floor(chord.startTime) !== absoluteBeat) return false;
 
+                        // If user explicitly hid this string via tablaturePreferences, no chord note here
+                        if (chord.tablaturePreferences && chord.tablaturePreferences[stringIndex] === null) {
+                          return false;
+                        }
+
+                        // If user set a specific pitch for this string, there IS a chord note
+                        if (chord.tablaturePreferences && chord.tablaturePreferences[stringIndex]) {
+                          return true;
+                        }
+
+                        // Otherwise, use automatic chord shape
                         const chordShape = getUkuleleChordShape(chord.roman, song.key);
 
                         // Check if this string has a chord note
@@ -1995,6 +2006,12 @@ export function PianoRoll() {
                             }}
                             onClick={(e) => {
                               e.stopPropagation();
+
+                              // Check if there's a chord at this time position
+                              const activeChord = song.chords.find(chord =>
+                                chord.startTime <= absoluteBeat &&
+                                chord.startTime + chord.duration > absoluteBeat
+                              );
 
                               // Get all pitches available at this time
                               const availablePitches = getAllPitchesAtTime(absoluteBeat, song.notes, song.chords, song.key);
@@ -2032,7 +2049,7 @@ export function PianoRoll() {
                                   stringIndex: stringIndex,
                                   options: options,
                                   timePosition: absoluteBeat,
-                                  isChordContext: false // This is from an empty placeholder
+                                  isChordContext: !!activeChord // Chord context if a chord is active
                                 });
                               }
                             }}
