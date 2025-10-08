@@ -1394,56 +1394,10 @@ export function PianoRoll() {
           updateNote(existingNote.id, { preferredString: stringIndex });
         }
       } else {
-        // No existing note with this pitch, create a new one
-        if (!isChordContext) {
-          // Melody context - check if there's a different note on this string at this time
-          const noteOnTargetString = song.notes.find(n => {
-            if (n.startTime !== timePosition) return false;
-
-            const noteString = n.preferredString !== undefined && n.preferredString >= 0
-              ? n.preferredString
-              : findBestFretPosition(n.pitch)?.string;
-
-            return noteString === stringIndex;
-          });
-
-          // If there's a note on the target string, hide it
-          if (noteOnTargetString) {
-            updateNote(noteOnTargetString.id, { preferredString: -1 });
-            // Small delay before creating new note
-            setTimeout(() => {
-              if (option.pitch) {
-                const components = durationToComponents(selectedDuration);
-                addNote({
-                  pitch: option.pitch,
-                  startTime: timePosition,
-                  duration: selectedDuration,
-                  durationComponents: components,
-                  preferredString: stringIndex,
-                });
-              }
-            }, 0);
-          } else {
-            const components = durationToComponents(selectedDuration);
-            addNote({
-              pitch: option.pitch,
-              startTime: timePosition,
-              duration: selectedDuration,
-              durationComponents: components,
-              preferredString: stringIndex,
-            });
-          }
-        } else {
-          // Chord context - just create the note, don't affect others
-          const components = durationToComponents(selectedDuration);
-          addNote({
-            pitch: option.pitch,
-            startTime: timePosition,
-            duration: selectedDuration,
-            durationComponents: components,
-            preferredString: stringIndex,
-          });
-        }
+        // No existing note with this pitch at this time
+        // IMPORTANT: Tablature should NEVER create new notes in Piano Roll
+        // It only shows how to play existing notes
+        // Do nothing if the note doesn't exist in Piano Roll
       }
     }
 
