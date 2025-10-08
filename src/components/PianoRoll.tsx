@@ -1448,7 +1448,33 @@ export function PianoRoll() {
           }
         } else {
           // No existing melody note with this pitch
-          // Don't create new notes from tablature
+          // Check if there's an active chord at this time that we can modify
+          const activeChord = song.chords.find(c =>
+            c.startTime <= timePosition &&
+            c.startTime + c.duration > timePosition
+          );
+
+          if (activeChord) {
+            // There's a chord - user wants to show a chord note on this string
+            // First, hide any melody note currently on this string
+            const noteOnThisString = song.notes.find(n => {
+              if (n.startTime !== timePosition) return false;
+              const noteString = n.preferredString !== undefined && n.preferredString >= 0
+                ? n.preferredString
+                : findBestFretPosition(n.pitch)?.string;
+              return noteString === stringIndex;
+            });
+
+            if (noteOnThisString) {
+              updateNote(noteOnThisString.id, { preferredString: -1 });
+            }
+
+            // Now set the chord preference for this string
+            const currentPrefs = activeChord.tablaturePreferences || {};
+            const newPrefs = { ...currentPrefs, [stringIndex]: option.pitch };
+            updateChord(activeChord.id, { tablaturePreferences: newPrefs });
+          }
+          // Otherwise: don't create new notes from tablature
         }
       }
     }
