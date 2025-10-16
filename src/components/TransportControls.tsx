@@ -42,7 +42,7 @@ const ToggleButton = styled(ControlButton)<{ $isActive: boolean }>`
 `;
 
 export function TransportControls() {
-  const { isPlaying, setIsPlaying, setCurrentBeat, setCursorPosition, cursorPosition, song, isPracticeMode, setIsPracticeMode } = useStore();
+  const { isPlaying, setIsPlaying, setCurrentBeat, setCursorPosition, cursorPosition, song, isPracticeMode, setIsPracticeMode, isFreePlayMode, setIsFreePlayMode } = useStore();
 
   const handlePlay = async () => {
     if (!isPlaying) {
@@ -124,6 +124,17 @@ export function TransportControls() {
       setCurrentBeat(0);
     }
     setIsPracticeMode(!isPracticeMode);
+    setIsFreePlayMode(false);
+  };
+
+  const handleToggleFreePlayMode = () => {
+    if (isPlaying) {
+      audioEngine.stopPlayback();
+      setIsPlaying(false);
+      setCurrentBeat(0);
+    }
+    setIsFreePlayMode(!isFreePlayMode);
+    setIsPracticeMode(false);
   };
 
   return (
@@ -134,6 +145,9 @@ export function TransportControls() {
       <ControlButton onClick={handleRewind}>⏮</ControlButton>
       <ToggleButton onClick={handleTogglePracticeMode} $isActive={isPracticeMode}>
         {isPracticeMode ? 'Editor' : 'Practice'}
+      </ToggleButton>
+      <ToggleButton onClick={handleToggleFreePlayMode} $isActive={isFreePlayMode}>
+        {isFreePlayMode ? 'Editor' : 'Free Play'}
       </ToggleButton>
     </Container>
   );

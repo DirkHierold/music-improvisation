@@ -7,6 +7,7 @@ import { PianoRoll } from './components/PianoRoll';
 import { SaveLoadButtons } from './components/SaveLoadButtons';
 import { UndoRedoButtons } from './components/UndoRedoButtons';
 import { UkuleleRoll } from './components/UkuleleRoll';
+import { FreePlayView } from './components/FreePlayView';
 import { useStore } from './store';
 
 const AppContainer = styled.div`
@@ -44,7 +45,7 @@ const MainContent = styled.div`
 `;
 
 function App() {
-  const { isPracticeMode } = useStore();
+  const { isPracticeMode, isFreePlayMode } = useStore();
 
   return (
     <>
@@ -56,7 +57,11 @@ function App() {
           <UndoRedoButtons />
           <SaveLoadButtons />
         </TopBar>
-        {isPracticeMode ? (
+        {isFreePlayMode ? (
+          <MainContent>
+            <FreePlayView />
+          </MainContent>
+        ) : isPracticeMode ? (
           <MainContent>
             <UkuleleRoll />
           </MainContent>

@@ -12,6 +12,7 @@ interface AppState {
   selectedNoteId: string | null;
   selectedChordId: string | null;
   isPracticeMode: boolean;
+  isFreePlayMode: boolean;
   isEditMode: boolean;
   history: {
     past: Song[];
@@ -35,6 +36,7 @@ interface AppState {
   setSelectedNoteId: (id: string | null) => void;
   setSelectedChordId: (id: string | null) => void;
   setIsPracticeMode: (isPracticeMode: boolean) => void;
+  setIsFreePlayMode: (isFreePlayMode: boolean) => void;
   setIsEditMode: (isEditMode: boolean) => void;
   saveSong: (filename: string) => Promise<void>;
   loadSong: (file: File) => Promise<boolean>;
@@ -75,6 +77,7 @@ export const useStore = create<AppState>((set, get) => ({
   selectedNoteId: null,
   selectedChordId: null,
   isPracticeMode: false,
+  isFreePlayMode: false,
   isEditMode: true,
   history: {
     past: [],
@@ -229,6 +232,7 @@ export const useStore = create<AppState>((set, get) => ({
   setSelectedNoteId: (selectedNoteId) => set({ selectedNoteId }),
   setSelectedChordId: (selectedChordId) => set({ selectedChordId }),
   setIsPracticeMode: (isPracticeMode) => set({ isPracticeMode }),
+  setIsFreePlayMode: (isFreePlayMode) => set({ isFreePlayMode }),
   setIsEditMode: (isEditMode) => set({ isEditMode }),
 
   saveSong: async (filename: string) => {
