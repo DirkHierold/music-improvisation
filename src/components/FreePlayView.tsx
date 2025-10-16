@@ -57,7 +57,7 @@ const NoteButton = styled.button<NoteButtonProps>`
   cursor: pointer;
   font-weight: bold;
   font-size: 14px;
-  transition: opacity 0.1s;
+  transition: transform 0.1s ease-out, opacity 0.1s;
   touch-action: none;
   user-select: none;
   display: flex;
@@ -66,7 +66,7 @@ const NoteButton = styled.button<NoteButtonProps>`
   min-width: 50px;
   min-height: 50px;
   opacity: ${props => props.$isInScale ? 1 : 0.5};
-  transform: ${props => props.$isActive ? 'scaleY(-1) scale(0.95)' : 'scaleY(-1)'};
+  transform: ${props => props.$isActive ? 'scaleY(-1) scale(1.15)' : 'scaleY(-1) scale(1)'};
 
   &:hover {
     opacity: 1;
