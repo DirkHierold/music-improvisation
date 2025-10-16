@@ -9,7 +9,7 @@ const Container = styled.div`
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 20px;
+  padding: 5px;
   background-color: #2a2a2a;
   border-radius: 5px;
 `;
@@ -17,15 +17,15 @@ const Container = styled.div`
 const GridContainer = styled.div`
   flex: 1;
   display: grid;
-  gap: 4px;
-  padding: 10px;
-  overflow: auto;
-  justify-content: center;
-  align-content: center;
+  gap: 3px;
+  padding: 0;
+  overflow: hidden;
+  justify-content: stretch;
+  align-content: stretch;
 
   /* Make grid items responsive to container size */
-  grid-template-columns: repeat(12, minmax(50px, 1fr));
-  grid-template-rows: repeat(8, minmax(50px, 1fr));
+  grid-template-columns: repeat(12, 1fr);
+  grid-template-rows: repeat(8, 1fr);
 
   /* Start grid from bottom-left corner */
   grid-auto-flow: column;
@@ -52,21 +52,22 @@ const NoteButton = styled.button<NoteButtonProps>`
   border: 2px solid ${props => props.$isInScale
     ? props.$color
     : '#555'};
-  border-radius: 8px;
+  border-radius: 6px;
   color: white;
   cursor: pointer;
   font-weight: bold;
   font-size: 14px;
-  transition: transform 0.1s ease-out, opacity 0.1s;
+  transition: transform 0.05s ease-out, opacity 0.1s;
   touch-action: none;
   user-select: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 50px;
-  min-height: 50px;
+  width: 100%;
+  height: 100%;
   opacity: ${props => props.$isInScale ? 1 : 0.5};
-  transform: ${props => props.$isActive ? 'scaleY(-1) scale(1.15)' : 'scaleY(-1) scale(1)'};
+  transform: ${props => props.$isActive ? 'scale(1.15, -1.15)' : 'scale(1, -1)'};
+  transform-origin: center center;
 
   &:hover {
     opacity: 1;
@@ -153,6 +154,7 @@ export function FreePlayView() {
   };
 
   const handleNoteEnd = (pitch: string) => {
+    // Only update state, don't play sound
     setActiveNotes(prev => {
       const newSet = new Set(prev);
       newSet.delete(pitch);
@@ -170,11 +172,13 @@ export function FreePlayView() {
   };
 
   // Touch events - simple touch without sliding
-  const handleTouchStart = (pitch: string) => {
+  const handleTouchStart = (e: React.TouchEvent, pitch: string) => {
+    e.preventDefault();
     handleNoteStart(pitch);
   };
 
-  const handleTouchEnd = (pitch: string) => {
+  const handleTouchEnd = (e: React.TouchEvent, pitch: string) => {
+    e.preventDefault();
     handleNoteEnd(pitch);
   };
 
@@ -196,9 +200,9 @@ export function FreePlayView() {
               onMouseDown={() => handleMouseDown(noteData.pitch)}
               onMouseUp={() => handleMouseUp(noteData.pitch)}
               onMouseLeave={() => handleMouseUp(noteData.pitch)}
-              onTouchStart={() => handleTouchStart(noteData.pitch)}
-              onTouchEnd={() => handleTouchEnd(noteData.pitch)}
-              onTouchCancel={() => handleTouchEnd(noteData.pitch)}
+              onTouchStart={(e) => handleTouchStart(e, noteData.pitch)}
+              onTouchEnd={(e) => handleTouchEnd(e, noteData.pitch)}
+              onTouchCancel={(e) => handleTouchEnd(e, noteData.pitch)}
             >
               {noteData.note}
             </NoteButton>
