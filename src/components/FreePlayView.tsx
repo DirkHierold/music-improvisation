@@ -42,6 +42,7 @@ const GridContainer = styled.div`
 interface NoteButtonProps {
   $color: string;
   $isInScale: boolean;
+  $isActive: boolean;
 }
 
 const NoteButton = styled.button<NoteButtonProps>`
@@ -56,7 +57,7 @@ const NoteButton = styled.button<NoteButtonProps>`
   cursor: pointer;
   font-weight: bold;
   font-size: 14px;
-  transition: all 0.1s;
+  transition: opacity 0.1s;
   touch-action: none;
   user-select: none;
   display: flex;
@@ -65,14 +66,9 @@ const NoteButton = styled.button<NoteButtonProps>`
   min-width: 50px;
   min-height: 50px;
   opacity: ${props => props.$isInScale ? 1 : 0.5};
+  transform: ${props => props.$isActive ? 'scaleY(-1) scale(0.95)' : 'scaleY(-1)'};
 
   &:hover {
-    opacity: 1;
-    transform: scaleY(-1) scale(1.05);
-  }
-
-  &:active {
-    transform: scaleY(-1) scale(0.95);
     opacity: 1;
   }
 `;
@@ -173,91 +169,22 @@ export function FreePlayView() {
     handleNoteEnd(pitch);
   };
 
-  const handleMouseEnter = (pitch: string, e: React.MouseEvent) => {
-    // Only trigger if mouse button is pressed
-    if (e.buttons === 1) {
-      handleNoteStart(pitch);
-    }
+  // Touch events - simple touch without sliding
+  const handleTouchStart = (pitch: string) => {
+    handleNoteStart(pitch);
   };
 
-  const handleMouseLeave = (pitch: string) => {
+  const handleTouchEnd = (pitch: string) => {
     handleNoteEnd(pitch);
   };
 
-  // Touch events for multi-touch support
-  const handleTouchStart = (e: React.TouchEvent) => {
-    e.preventDefault();
-
-    Array.from(e.touches).forEach(touch => {
-      const element = document.elementFromPoint(touch.clientX, touch.clientY);
-      if (element && element.hasAttribute('data-pitch')) {
-        const pitch = element.getAttribute('data-pitch');
-        if (pitch) handleNoteStart(pitch);
-      }
-    });
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    e.preventDefault();
-
-    // Get all currently touched pitches
-    const touchedPitches = new Set<string>();
-    Array.from(e.touches).forEach(touch => {
-      const element = document.elementFromPoint(touch.clientX, touch.clientY);
-      if (element && element.hasAttribute('data-pitch')) {
-        const pitch = element.getAttribute('data-pitch');
-        if (pitch) touchedPitches.add(pitch);
-      }
-    });
-
-    // Start notes that are newly touched
-    touchedPitches.forEach(pitch => {
-      if (!activeNotes.has(pitch)) {
-        handleNoteStart(pitch);
-      }
-    });
-
-    // Stop notes that are no longer touched
-    activeNotes.forEach(pitch => {
-      if (!touchedPitches.has(pitch)) {
-        handleNoteEnd(pitch);
-      }
-    });
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    e.preventDefault();
-
-    // Get remaining touches
-    const remainingPitches = new Set<string>();
-    Array.from(e.touches).forEach(touch => {
-      const element = document.elementFromPoint(touch.clientX, touch.clientY);
-      if (element && element.hasAttribute('data-pitch')) {
-        const pitch = element.getAttribute('data-pitch');
-        if (pitch) remainingPitches.add(pitch);
-      }
-    });
-
-    // Stop all notes that are not in remaining touches
-    activeNotes.forEach(pitch => {
-      if (!remainingPitches.has(pitch)) {
-        handleNoteEnd(pitch);
-      }
-    });
-  };
-
   return (
-    <Container
-      ref={containerRef}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
-    >
+    <Container ref={containerRef}>
       <GridContainer>
         {noteGrid.map((noteData, index) => {
           const inScale = isNoteInScale(noteData.note);
           const color = getNoteColor(noteData.note);
+          const isActive = activeNotes.has(noteData.pitch);
 
           return (
             <NoteButton
@@ -265,10 +192,13 @@ export function FreePlayView() {
               data-pitch={noteData.pitch}
               $color={color}
               $isInScale={inScale}
+              $isActive={isActive}
               onMouseDown={() => handleMouseDown(noteData.pitch)}
               onMouseUp={() => handleMouseUp(noteData.pitch)}
-              onMouseEnter={(e) => handleMouseEnter(noteData.pitch, e)}
-              onMouseLeave={() => handleMouseLeave(noteData.pitch)}
+              onMouseLeave={() => handleMouseUp(noteData.pitch)}
+              onTouchStart={() => handleTouchStart(noteData.pitch)}
+              onTouchEnd={() => handleTouchEnd(noteData.pitch)}
+              onTouchCancel={() => handleTouchEnd(noteData.pitch)}
             >
               {noteData.note}
             </NoteButton>
